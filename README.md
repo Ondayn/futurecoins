@@ -2,6 +2,8 @@
 
 **Build a currency. Simulate its economy. Discover what makes it work.**
 
+**▶ Try it in your browser (no install):** <https://futurecoins.streamlit.app/>
+
 FutureCoins is an educational sandbox game about cryptocurrency networks. You configure a
 virtual currency, launch an agent-based simulation on an emoji grid, and watch the
 consequences of your protocol and monetary decisions unfold.
@@ -49,7 +51,7 @@ press **Apply config**, then **Run**.
 
 | Control | Meaning |
 | --- | --- |
-| **Launch simulation** | Build a fresh simulation from the current sidebar settings |
+| **⚙️ Apply config** | Build a fresh simulation from the current sidebar settings |
 | **Run / Pause** | Start or stop the clock (1 tick = 1 simulated day) |
 | **Reset** | Return the current simulation to tick 0 with the same rules |
 | **Speed** | Ticks advanced per frame: 1, 2, 5 or 20 (the frame rate stays ~1 fps) |
@@ -126,6 +128,22 @@ marketplace and no multiplayer. A Solana Memo attestation and an optional NFT ba
 deliberately deferred; the design keeps the engine independent so they can be added as a
 separate adapter later.
 
+## Beginner walkthrough (first time here)
+
+1. **Try the live app:** open <https://futurecoins.streamlit.app/> (no installation).
+2. **Read the welcome guide** on first visit, then press **Start playing**.
+3. **Pick a preset or start from Blank Canvas** in the sidebar, adjust settings, press **⚙️ Apply config**.
+4. **Press Run.** Each tick = 1 simulated day. Watch the grid, indicator cards, and charts.
+5. **Explore tabs:** **Dashboard** (health/history after you run), **Discovery** (match Bitcoin 2009 by observing behavior; similarity feedback appears after running), **Awards**, **Glossary**, **Why** (changes + feedback loops).
+6. **Run locally (optional):**
+   ```bash
+   python -m venv .venv
+   .venv\Scripts\activate          # Windows
+   pip install -e ".[dev]"
+   streamlit run app.py
+   ```
+7. **Key folders:** `futurecoins/` = simulation engine + UI modules (engine has no Streamlit imports), `app.py` = Streamlit app, `tests/` = pytest suite, `docs/` = design/architecture/glossary.
+
 ## License
 
-MIT (recommended default for a hackathon project).
+[MIT](LICENSE) © 2026 Ondayn.
