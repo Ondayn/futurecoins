@@ -80,7 +80,7 @@ for the right to validate blocks.
 *Real world:* ETH staking, SOL delegation.
 
 **Block time** — the average time between two blocks being created.
-*In the game:* a parameter. With a 600 s block time there are 6 blocks per simulated hour.
+*In the game:* a parameter. With a 600 s block time there are 144 blocks per simulated day.
 *Real world:* Bitcoin ~10 min; Solana ~0.4 s.
 
 **Transactions per second (TPS)** — how many transactions the network processes each second.
@@ -158,7 +158,7 @@ respond to global prices and events — so this is an ABM on a grid, not a pure 
 *Real world:* Conway's Game of Life.
 
 **Tick** — one discrete step of the simulation.
-*In the game:* 1 tick = 1 simulated hour. One year = 8 760 ticks.
+*In the game:* 1 tick = 1 simulated day. One year = 365 ticks.
 *Real world:* a "block" is the closest analogue, but a tick can contain many blocks.
 
 **Emergence** — complex behaviour that nobody programmed directly.

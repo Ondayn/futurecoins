@@ -1,0 +1,705 @@
+"""FutureCoins — the Streamlit application.
+
+Run with:
+
+    streamlit run app.py
+
+The app is deliberately thin. It owns three things:
+
+1. `st.session_state` — the one live `Simulation`, the achievement manager, and
+   a few UI preferences.
+2. The 1-second fragment that advances the simulation and redraws the live
+   view.
+3. Presentation of data the engine already computed.
+
+No simulation formula lives here. If a number is wrong, the fix belongs in the
+engine, with a test.
+"""
+
+from __future__ import annotations
+
+import html
+import json
+
+import streamlit as st
+
+from futurecoins.achievements import (
+    ACHIEVEMENT_DEFS,
+    AchievementManager,
+    RunSummary,
+    encode_snapshot,
+)
+from futurecoins.config import NEVER, PRESET_UNLOCKS, PRESETS
+from futurecoins.discovery import BITCOIN_2009, build_hints, near_misses, score_config
+from futurecoins.education import GLOSSARY, RESOURCES, categories, search
+from futurecoins.engine import Simulation
+from futurecoins.interface import controls, dashboard, grid_view, theme, tooltips
+from futurecoins.metrics import health_breakdown
+
+st.set_page_config(
+    page_title="FutureCoins",
+    page_icon="🪙",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+theme.inject()
+
+
+# ---------------------------------------------------------------------------
+# Session state
+# ---------------------------------------------------------------------------
+
+
+def _initialise() -> None:
+    if "sim" in st.session_state:
+        return
+
+    preset = PRESETS["Blank Canvas"]
+    st.session_state.sim = Simulation(preset)
+    st.session_state.launch_config = preset
+    st.session_state.running = False
+    st.session_state.speed = 2
+    st.session_state.achievements = AchievementManager()
+    st.session_state.event_feed = []
+    st.session_state.hints_shown = 1
+    st.session_state.ascii_mode = False
+    st.session_state.preset_choice = "Blank Canvas"
+    st.session_state["_preset_applied"] = None
+    st.session_state.seen_guide = False
+
+
+_initialise()
+
+
+def _welcome_screen() -> None:
+    """Full-page guide shown on first visit."""
+    st.html(theme.hero("FutureCoins", "Design the rules. Watch the consequences.", False, tick=0))
+    st.markdown("")
+    st.markdown("### Welcome to FutureCoins")
+    st.markdown(
+        "FutureCoins is a sandbox: you design a cryptocurrency's rules, "
+        "launch a simulation, and watch what happens to its economy, its "
+        "network, and its people."
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("#### 🎮 How to play")
+        st.markdown(
+            "1. **Design** your currency in the sidebar (consensus, block time, "
+            "supply, fees, population).\n"
+            "2. Press **⚙️ Apply config** to load your settings.\n"
+            "3. Press **▶ Run** to start the clock. Each tick = 1 simulated day.\n"
+            "4. Watch the grid, the 12 indicator cards, and the charts.\n"
+            "5. Press **⏸ Pause** / **↺ Reset** as needed."
+        )
+        st.markdown("#### 🎯 Goal")
+        st.markdown(
+            "Keep your network alive and healthy. Discover Bitcoin 2009 in "
+            "Discovery Mode. Earn all 5 achievements to unlock every preset."
+        )
+    with col2:
+        st.markdown("#### 📊 The dashboard")
+        st.markdown(
+            "- **Active nodes** — who's online vs total population\n"
+            "- **Block interval** — how fast blocks arrive\n"
+            "- **Throughput** — transactions per second\n"
+            "- **Fees** — congestion pricing\n"
+            "- **Supply** — minted, circulating, burned\n"
+            "- **Price index** — simulated market price (model)\n"
+            "- **Sentiment** — public mood (model)\n"
+            "- **Network health** — weighted composite (model)"
+        )
+        st.markdown("#### 🔍 Discovery Mode")
+        st.markdown(
+            "Reconstruct Bitcoin 2009 from its behaviour. Adjust parameters, "
+            "watch your similarity score rise, and unlock hints. Reach 95% to "
+            "unlock the Bitcoin 2009 preset."
+        )
+
+    st.markdown("#### 📚 Glossary & resources")
+    st.markdown(
+        "Hover any card or term for a definition. The **Glossary** tab has 51 "
+        "terms. The **Why** tab explains the formulas and feedback loops. "
+        "The **Resources** section links to real-world learning material."
+    )
+
+    st.markdown("")
+    if st.button("🚀 Start playing", type="primary", width="stretch"):
+        st.session_state.seen_guide = True
+        st.rerun()
+
+
+if not st.session_state.seen_guide:
+    _welcome_screen()
+    st.stop()
+
+
+def _summary(sim: Simulation) -> RunSummary:
+    """Build the only object achievements are allowed to inspect."""
+    breakdown = score_config(sim.config, BITCOIN_2009)
+    return RunSummary(
+        tick=sim.tick,
+        metrics=sim.metrics,
+        config=sim.config,
+        history=tuple(sim.history),
+        events=tuple(sim.event_history),
+        discovery_score=breakdown.total,
+        snapshot=encode_snapshot(sim.agents, sim.config.rows, sim.config.cols),
+    )
+
+
+def _compact(value: float) -> str:
+    magnitude = abs(value)
+    if magnitude >= 1e9:
+        return f"{value / 1e9:,.2f} B"
+    if magnitude >= 1e6:
+        return f"{value / 1e6:,.2f} M"
+    if magnitude >= 1e3:
+        return f"{value / 1e3:,.1f} K"
+    return f"{value:,.2f}"
+
+
+def _param_value(key: str, value: object) -> str:
+    """Human-readable player value. Never shows the target."""
+    if key == "max_supply" and value is None:
+        return "No cap"
+    if key == "consensus":
+        return "Proof of Work" if value == "pow" else "Proof of Stake"
+    if key == "halving_interval_blocks" and value is not None:
+        number = float(value)
+        return "Never" if number >= NEVER / 10 else f"{number:,.0f} blocks"
+    if key == "block_time_s" and value is not None:
+        return f"{float(value):,.0f} s"
+    if key == "base_fee" and value is not None:
+        return f"{float(value):,.4f}"
+    if key == "burn_rate" and value is not None:
+        return f"{float(value):.0%}"
+    if key in ("initial_supply", "max_supply", "initial_block_reward") and value is not None:
+        return _compact(float(value))
+    if key == "tx_per_block" and value is not None:
+        return f"{float(value):,.0f}"
+    return str(value)
+
+
+# ---------------------------------------------------------------------------
+# Sidebar
+# ---------------------------------------------------------------------------
+
+with st.sidebar:
+    st.markdown("### ⚙️ Currency designer")
+
+    awarded = st.session_state.achievements.awarded_ids
+    # Locked presets are shown as "Mystery Currency NNN" until the achievement
+    # that unlocks them is earned. The numbering is stable (preset order).
+    # Presets not in PRESET_UNLOCKS are permanently locked (no unlock path yet).
+    display_names: list[str] = []
+    display_to_real: dict[str, str] = {}
+    mystery_no = 0
+    for real_name in PRESETS:
+        if real_name not in PRESET_UNLOCKS:
+            # Permanently locked: no achievement unlocks it yet.
+            mystery_no += 1
+            display = f"🔒 Mystery Currency {mystery_no:03d}"
+            display_names.append(display)
+            display_to_real[display] = real_name
+            continue
+        unlock_id = PRESET_UNLOCKS[real_name]
+        if unlock_id is None or unlock_id in awarded:
+            display_names.append(real_name)
+            display_to_real[real_name] = real_name
+        else:
+            mystery_no += 1
+            display = f"🔒 Mystery Currency {mystery_no:03d}"
+            display_names.append(display)
+            display_to_real[display] = real_name
+
+    st.selectbox(
+        "Preset",
+        options=display_names,
+        key="preset_choice",
+        help="A preset is just a named configuration. Locked presets are unlocked "
+        "by earning their matching achievement in Discovery Mode.",
+    )
+
+    selected_display = st.session_state.preset_choice
+    selected_real = display_to_real[selected_display]
+    if selected_real not in PRESET_UNLOCKS:
+        # Permanently locked preset.
+        st.warning(
+            "🔒 Locked. This currency has not been discovered yet.",
+            icon="🔒",
+        )
+        st.session_state["_preset_applied"] = selected_display
+    else:
+        unlock_id = PRESET_UNLOCKS[selected_real]
+        locked = unlock_id is not None and unlock_id not in awarded
+        if locked:
+            achievement = next(
+                (a for a in ACHIEVEMENT_DEFS if a.id == unlock_id), None
+            )
+            name = achievement.name if achievement else unlock_id
+            st.warning(
+                f"🔒 Locked. Earn **{name}** to unlock this preset.",
+                icon="🔒",
+            )
+            st.session_state["_preset_applied"] = selected_display
+        elif st.session_state.get("_preset_applied") != selected_display:
+            controls.apply_preset(PRESETS[selected_real])
+            st.session_state["_preset_applied"] = selected_display
+
+    config = controls.render_controls()
+
+    st.divider()
+    if st.button("⚙️ Apply config", type="primary", width="stretch"):
+        if config.population < 1:
+            st.error("A simulation needs at least one agent.")
+        else:
+            st.session_state.sim = Simulation(config)
+            st.session_state.launch_config = config
+            st.session_state.running = False
+            st.session_state.event_feed = []
+            st.session_state.hints_shown = 1
+            st.toast("New simulation ready. Press Run.", icon="🚀")
+
+    left, right = st.columns(2)
+    if left.button(
+        "⏸ Pause" if st.session_state.running else "▶ Run",
+        width="stretch",
+        disabled=st.session_state.sim.ended,
+        help="The network has ended. Reset it to run again."
+        if st.session_state.sim.ended
+        else None,
+    ):
+        st.session_state.running = not st.session_state.running
+        st.rerun()
+    if right.button("↺ Reset", width="stretch"):
+        st.session_state.sim.reset()
+        st.session_state.running = False
+        st.session_state.event_feed = []
+        st.rerun()
+        st.session_state.sim.reset()
+        st.session_state.running = False
+        st.session_state.event_feed = []
+        st.rerun()
+
+    st.selectbox(
+        "Speed (ticks per frame)",
+        options=[1, 2, 5, 20],
+        key="speed",
+        format_func=lambda n: f"{n} tick{'s' if n > 1 else ''} / s",
+        help="The frame rate stays at 1 fps; this changes how much simulated time each frame covers.",
+    )
+    st.toggle(
+        "ASCII fallback",
+        key="ascii_mode",
+        help="Use letters instead of emoji if a font renders the grid inconsistently.",
+    )
+
+    sim: Simulation = st.session_state.sim
+    st.divider()
+    st.caption(
+        f"**Simulation** · {sim.config.population:,} agents\n\n"
+        f"Seed {sim.config.seed} · fingerprint `{sim.config.fingerprint()}`"
+    )
+    with st.expander("About this simulation"):
+        st.write(
+            "FutureCoins is an educational model, not a blockchain and not financial advice. "
+            "Price, health and sentiment are formula outputs, labelled *model* on the dashboard."
+        )
+        st.caption("1 tick = 1 simulated day · 365 ticks = 1 simulated year")
+
+
+# ---------------------------------------------------------------------------
+# Live view (fragment: advances the clock without rerunning the sidebar)
+# ---------------------------------------------------------------------------
+
+
+@st.fragment(run_every="1s")
+def live_view() -> None:
+    sim = st.session_state.sim
+
+    if st.session_state.running:
+        results = sim.run(int(st.session_state.speed))
+        new_events = [event for result in results for event in result.events]
+        if new_events:
+            st.session_state.event_feed.extend(new_events)
+            st.session_state.event_feed = st.session_state.event_feed[-50:]
+            for event in new_events[:3]:
+                st.toast(event.message, icon="⚠️")
+
+        awards = st.session_state.achievements.evaluate(_summary(sim))
+        for award in awards:
+            st.toast(f"{award.icon} {award.name} unlocked!", icon="🏆")
+
+        if sim.ended:
+            # Terminal state: stop the clock and refresh the sidebar so its Run
+            # button becomes disabled instead of inviting a no-op click.
+            st.session_state.running = False
+            st.rerun()
+
+    st.html(
+        theme.hero(
+            "FutureCoins",
+            "Design the rules. Watch the consequences.",
+            st.session_state.running,
+            tick=sim.tick,
+        )
+    )
+
+    if sim.ended:
+        st.warning(
+            f"🪦 **Network ended at tick {sim.tick:,}.** {sim.end_reason} "
+            "Press **Reset** to start again with the same rules.",
+            icon="🪦",
+        )
+
+    # Wide screens: a full-width strip of compact indicators, then the board on
+    # the left and the tabs on the right. Stacking everything would push half
+    # the page below the fold. CSS (theme.py) stacks this block again on narrow
+    # screens.
+    dashboard.render(sim.metrics, sim.config)
+
+    with st.container(key="fc-split"):
+        left, right = st.columns([1.4, 1], gap="medium")
+
+    with left:
+        grid_view.render(sim, ascii_mode=st.session_state.ascii_mode)
+
+    with right:
+        tabs = st.tabs(["📖 Guide", "Dashboard", "Discovery", "Awards", "Glossary", "Why"])
+
+    # -- Guide -------------------------------------------------------------
+    with tabs[0]:
+        st.markdown("### How to play FutureCoins")
+        st.markdown(
+            "FutureCoins is a sandbox: you design a cryptocurrency's rules, "
+            "launch a simulation, and watch what happens to its economy, its "
+            "network, and its people."
+        )
+
+        st.markdown("#### 1. Design your currency")
+        st.markdown(
+            "Use the **Currency designer** sidebar to set consensus (Proof of Work "
+            "or Proof of Stake), block time, supply cap, fees, population, and more. "
+            "Pick a **Preset** to start from a known design, or use **Blank Canvas** "
+            "to build from scratch. Press **⚙️ Apply config** to load your settings."
+        )
+
+        st.markdown("#### 2. Run the simulation")
+        st.markdown(
+            "Press **▶ Run** to start the clock. Each tick is **one simulated day**. "
+            "The grid shows your network: each cell is an agent (or a cohort of "
+            "agents). Miners ⛏️, validators ✅, users 👤, traders 📈, developers 💻, "
+            "and attackers 🏴. Grey/blank cells are offline agents. Press **⏸ Pause** "
+            "to stop, **↺ Reset** to start over."
+        )
+
+        st.markdown("#### 3. Read the dashboard")
+        st.markdown(
+            "The **12 indicator cards** show active nodes, block interval, "
+            "throughput, fees, supply, price index, sentiment, and network health. "
+            "The **Dashboard** tab breaks down health into its 5 components with "
+            "visible weights. The chart shows price, health, and sentiment over "
+            "time. Everything labelled *model* is a simulation output, not real "
+            "market data."
+        )
+
+        st.markdown("#### 4. Play Discovery Mode")
+        st.markdown(
+            "The **Discovery** tab challenges you to reconstruct Bitcoin 2009 "
+            "from its behaviour. Adjust parameters and watch your **similarity "
+            "score** rise. Hints unlock as you get closer. Reaching 95% similarity "
+            "unlocks the Bitcoin 2009 preset."
+        )
+
+        st.markdown("#### 5. Earn achievements")
+        st.markdown(
+            "The **Awards** tab tracks 5 achievements. Each one you earn unlocks "
+            "a preset (shown as 🔒 Mystery Currency until unlocked). Export your "
+            "achievements to carry them to another machine."
+        )
+
+        st.markdown("#### 6. Tips")
+        st.markdown(
+            "- **Speed** changes how many ticks per frame (1/2/5/20). The frame "
+            "rate stays at 1 fps.\n"
+            "- **ASCII fallback** uses letters if emoji render oddly.\n"
+            "- If **network health** drops below 15 for 5 ticks, or all users "
+            "leave, the currency **fails** and the simulation ends.\n"
+            "- If every agent goes offline, the network is **dead** — press "
+            "Reset to revive it.\n"
+            "- Hover any card or term for a definition. The **Glossary** tab has "
+            "51 terms."
+        )
+
+        st.caption(
+            "1 tick = 1 simulated day · 365 ticks = 1 simulated year · "
+            "This is an educational model, not financial advice."
+        )
+
+    # -- Dashboard ---------------------------------------------------------
+    with tabs[1]:
+        metrics = sim.metrics
+        st.markdown("#### Network health breakdown")
+        st.caption(
+            "The score is a weighted average. Every weight is visible, so you can disagree "
+            "with the formula instead of guessing what it means."
+        )
+        dashboard.render_health(metrics)
+
+        history = sim.history[-400:]
+        if len(history) > 1:
+            st.markdown("#### Recent history")
+            st.line_chart(
+                {
+                    "Price index (model)": [m.price for m in history],
+                    "Network health (model)": [m.health for m in history],
+                    "Sentiment × 100 (model)": [m.sentiment * 100 for m in history],
+                },
+                height=240,
+            )
+            st.caption(
+                f"Last {len(history)} ticks. These are formula outputs, not market data."
+            )
+
+        if st.session_state.event_feed:
+            st.markdown("#### Event log")
+            for event in reversed(st.session_state.event_feed[-6:]):
+                st.markdown(f"**Tick {event.tick} · {event.name}** — {event.message}")
+
+    # -- Discovery ---------------------------------------------------------
+    with tabs[2]:
+        breakdown = score_config(sim.config, BITCOIN_2009)
+        st.markdown(f"### {BITCOIN_2009.name} — {BITCOIN_2009.era}")
+        st.markdown(f"> *{BITCOIN_2009.riddle}*")
+        st.markdown("")  # vertical breathing room
+
+        st.metric("Similarity", f"{breakdown.total:.1%}")
+        st.progress(min(max(breakdown.total, 0.0), 1.0))
+
+        st.markdown(f"**{breakdown.message}**")
+        misses = near_misses(breakdown)
+        if misses:
+            st.caption("Close but not exact: " + ", ".join(misses))
+        st.markdown("")  # vertical breathing room
+        st.caption(BITCOIN_2009.caveat)
+
+        st.markdown("#### How the score is built")
+        st.caption(
+            "Weights are visible on purpose. A score you cannot inspect is a guessing game. "
+            "Parameters historians are less sure about count for less."
+        )
+        rows = [
+            {
+                "Parameter": param.label,
+                "Your value": _param_value(param.key, param.value),
+                "Similarity": f"{param.similarity:.0%}",
+                "Weight": f"{param.effective_weight:.0%}",
+                "Confidence": param.confidence,
+            }
+            for param in breakdown.params
+        ]
+        st.dataframe(rows, width="stretch", hide_index=True)
+
+        st.markdown("#### Hints")
+        hints = build_hints(breakdown, limit=3)
+        shown = min(st.session_state.hints_shown, len(hints))
+        if not hints:
+            st.success("Every parameter matches. You have reconstructed this currency.")
+        for hint in hints[:shown]:
+            st.html(f'<div class="fc-hint">💡 {html.escape(hint)}</div>')
+        if shown < len(hints) and st.button("Reveal another hint", key="more_hints"):
+            st.session_state.hints_shown = shown + 1
+            st.rerun()
+
+        if breakdown.total >= 0.95:
+            tooltips.note(
+                "Discovery achieved. Notice what you did <em>not</em> need: a supply-cap "
+                "parameter. Bitcoin's 21 million limit is the sum of the halving series "
+                "210,000 × 50 × 2, not a constant in the rules."
+            )
+        else:
+            with st.expander("The teaching moment (spoiler-light)"):
+                st.write(
+                    "Bitcoin's 21 million cap is not written as a constant. It is the sum of "
+                    "the halving series. If you are stuck on the cap, try asking what the "
+                    "halving interval does to the total over a very long time."
+                )
+
+    # -- Achievements ------------------------------------------------------
+    with tabs[3]:
+        manager: AchievementManager = st.session_state.achievements
+        st.markdown("### Achievements")
+        st.caption(
+            f"{len(manager.awarded_ids)} of {len(ACHIEVEMENT_DEFS)} unlocked. "
+            "Each award records the configuration hash and a grid snapshot, so a run can be "
+            "reproduced."
+        )
+        for definition in ACHIEVEMENT_DEFS:
+            unlocked = manager.has(definition.id)
+            classes = "fc-award" + ("" if unlocked else " fc-locked")
+            status = "Unlocked" if unlocked else "Locked"
+            st.html(
+                f'<div class="{classes}"><span class="icon">{definition.icon}</span>'
+                f'<div><div class="name">{html.escape(definition.name)} '
+                f'<span class="fc-pill">{status}</span></div>'
+                f'<div class="desc">{html.escape(definition.description)}</div>'
+                f'<div class="desc">Hint: {html.escape(definition.hint)}</div></div></div>'
+            )
+            if unlocked:
+                award = manager.awards[definition.id]
+                with st.expander("Award details"):
+                    st.caption(
+                        f"Awarded {award.awarded_at} at tick {award.tick:,} · "
+                        f"seed {award.seed} · config `{award.config_hash}`"
+                    )
+                    if award.snapshot:
+                        grid_view.render_snapshot(
+                            award.snapshot,
+                            award.cols or sim.config.cols,
+                            ascii_mode=st.session_state.ascii_mode,
+                        )
+
+        st.divider()
+        st.markdown("### Carry your achievements to another machine")
+        st.caption(
+            "Unlocked presets follow your achievements. Export them here and "
+            "import them on another laptop to keep your progress."
+        )
+        if manager.awards:
+            payload = json.dumps(
+                [a.to_dict() for a in manager.as_list()],
+                indent=2,
+                ensure_ascii=False,
+            )
+            st.download_button(
+                "⬇ Export achievements",
+                data=payload,
+                file_name="futurecoins-achievements.json",
+                mime="application/json",
+            )
+        else:
+            st.caption("Nothing to export yet.")
+        uploaded = st.file_uploader(
+            "Import achievements (JSON)",
+            type="json",
+            key="ach_import",
+        )
+        if uploaded is not None:
+            try:
+                imported = json.loads(uploaded.read())
+                added = manager.import_awards(imported)
+                if added:
+                    st.toast(f"Imported {added} new achievement(s).", icon="📥")
+                else:
+                    st.info("No new achievements in that file.")
+            except (json.JSONDecodeError, OSError) as exc:
+                st.error(f"Could not read file: {exc}")
+
+    # -- Glossary ----------------------------------------------------------
+    with tabs[4]:
+        st.markdown("### Glossary")
+        query = st.text_input(
+            "Search",
+            key="glossary_query",
+            placeholder="fees, halving, stake, reflexivity…",
+        )
+        category = st.selectbox(
+            "Category",
+            options=["All", *categories()],
+            key="glossary_category",
+        )
+        results = search(query, None if category == "All" else category)
+        st.caption(f"{len(results)} of {len(GLOSSARY)} terms")
+        for entry in results:
+            with st.expander(f"{entry.term} — {entry.short}"):
+                st.write(entry.explanation)
+                st.markdown(f"**In this simulation**  \n{entry.in_game}")
+                st.markdown(f"**In the real world**  \n{entry.real_world}")
+                if entry.link:
+                    st.link_button(entry.link_label or "Learn more", entry.link)
+
+        st.divider()
+        st.markdown("### Further reading")
+        st.caption("Every link says what you will learn before you click it.")
+        for resource in RESOURCES:
+            st.markdown(
+                f"**[{resource.title}]({resource.url})** · *{resource.topic}*  \n"
+                f"{resource.what_you_learn}"
+            )
+
+    # -- Why ---------------------------------------------------------------
+    with tabs[5]:
+        st.markdown("### Why did this happen?")
+        st.caption(
+            "The last notable changes, written as sentences by the engine. If a number "
+            "surprised you, start here before changing a slider."
+        )
+        recent = list(sim.recent_changes)[-10:]
+        if recent:
+            for change in reversed(recent):
+                st.markdown(f"- {change}")
+        else:
+            st.info("Nothing notable yet. Press Run and give the network a few ticks.")
+
+        st.markdown("#### Active events")
+        active = sim.events.active_names
+        if active:
+            st.write(", ".join(active))
+        else:
+            st.caption("No event is currently active.")
+
+        st.markdown("#### Feedback loops")
+        st.caption(
+            "These are the causal chains that make the model feel alive. "
+            "Changing one parameter ripples through several indicators."
+        )
+        st.markdown(
+            "- **Health → Availability**: a sick network produces fewer blocks.\n"
+            "- **Health → Price**: price anchor scales with health (0 health = 10% value).\n"
+            "- **Sentiment → Demand**: better mood → more transactions.\n"
+            "- **Sentiment → Price**: rising prices boost sentiment (momentum).\n"
+            "- **Price → Demand**: expensive networks see less usage (elasticity).\n"
+            "- **Fees → Churn**: high fees push users to leave.\n"
+            "- **Concentration → Security**: concentrated networks are easier to capture.\n"
+            "- **Reliability → Sell pressure**: dropped transactions create selling.\n"
+            "- **Developers → Capacity**: developers slowly raise throughput."
+        )
+
+        st.markdown("#### Health, decomposed")
+        metrics = sim.metrics
+        rows = [
+            {
+                "Component": label,
+                "Value": f"{value:.0%}",
+                "Weight": f"{weight:.0%}",
+                "Contribution": f"{value * weight * 100:.1f} points",
+            }
+            for label, value, weight in health_breakdown(
+                metrics.participation,
+                metrics.concentration,
+                metrics.reliability,
+                metrics.security,
+                metrics.sentiment,
+            )
+        ]
+        st.dataframe(rows, width="stretch", hide_index=True)
+
+        if sim.event_history:
+            st.markdown("#### Event history")
+            for event in reversed(sim.event_history[-10:]):
+                st.markdown(
+                    f"**Tick {event.tick} · {event.name}** "
+                    f"(severity {event.severity:.2f}, {event.category}) — {event.message}"
+                )
+
+        st.divider()
+        tooltips.note(
+            "Every number on this page is a model output. FutureCoins does not connect to a "
+            "real blockchain, does not hold funds, and is not financial advice."
+        )
+
+
+live_view()

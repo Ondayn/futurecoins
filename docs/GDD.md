@@ -75,22 +75,31 @@ The grid is the emotional centre of the game. It must *look alive*.
 
 | Property | MVP value | Rationale |
 | --- | --- | --- |
-| Grid size | 40 × 20 = 800 cells | Fits a 1080p screen at readable emoji size |
+| Grid size | 30 × 30 = 900 cells | Square board, readable emoji on a laptop |
 | Cell content | one emoji, coloured by role | Instant role recognition |
 | Cell meaning | one agent, or a cohort of agents | Population can exceed cell count |
+| Offline agents | the cell becomes blank | The grid shows who is online, not who exists |
+| Empty slots | a faint dot | Never confused with an agent that left |
 | Update rate | 1 frame per tick, ~1–4 fps | Streamlit's minimum auto-rerun is 1 s |
-| Population display | always shown separately | Never imply 800 agents when there are 4,000 |
+| Population display | always shown separately | Never imply 900 agents when there are 4,000 |
 
 **Cohort rule.** When `population > cells`, one cell represents
-`ceil(population / cells)` agents. The cell shows the *dominant* role in that cohort and
-its opacity reflects how many of the cohort are active. The header always reads, e.g.:
+`ceil(population / cells)` agents. The cell shows the *dominant active* role in that cohort
+and its opacity reflects how many of the cohort are active. The header always reads, e.g.:
 
 ```
-Population: 4,820 agents · 800 cells · ~6 agents per cell
+Population: 4,820 agents · 900 cells · ~6 agents per cell (cohorts) · 42 offline (hidden)
 ```
 
 This is stated, not hidden. Confusing population with cell count is the single easiest
 way to teach the wrong lesson.
+
+**Sizing.** The board is square and sized from the *height* budget first: hero, indicator
+cards, population line and legend take their space, and the board fills what remains. A
+30 × 30 board therefore never forces a vertical scroll on a wide screen. On a wide
+landscape viewport the board sits beside the tabs, and the width the board gives up goes
+to the tab panel and its chart. On a narrow or portrait-ish viewport the tabs stack below
+the board instead of squeezing it.
 
 ---
 
@@ -330,13 +339,13 @@ That single insight is worth more than the whole score.
 | ID | Name | Condition |
 | --- | --- | --- |
 | `first_currency` | First Currency | Complete 1 tick with ≥ 1 active agent |
-| `survivor` | Survivor | 8 760 ticks (one simulated year) with health > 0 |
+| `survivor` | Survivor | 365 ticks (one simulated year) with health > 0 |
 | `genesis_discovery` | Genesis Discovery | Bitcoin 2009 similarity ≥ 0.95 |
 | `crisis_survivor` | Crisis Survivor | Survive a severity ≥ 0.6 event without health < 20 |
 | `network_architect` | Network Architect | ≥ 90 % participation and ≥ 50 active nodes for 100 ticks |
 
 Each award records: id, name, description, timestamp, config hash, final metrics, and a
-compact grid snapshot (800 characters, one per cell). Persisted to a local JSON file in
+compact grid snapshot (900 characters, one per cell). Persisted to a local JSON file in
 the MVP; no database.
 
 ### NFT minting (optional, post-MVP)

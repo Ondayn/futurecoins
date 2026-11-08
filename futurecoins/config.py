@@ -8,7 +8,7 @@ these exact rules". The UI builds a *new* config when the player presses Launch.
 
 Units used throughout the project
 ---------------------------------
-- 1 tick            = 1 simulated hour
+- 1 tick            = 1 simulated day
 - block_time_s      = seconds per block (a protocol rule)
 - token amounts     = abstract "tokens", not money, not a real asset
 """
@@ -105,17 +105,17 @@ class AgentParams:
     stake_per_validator: float = 10_000.0
 
     # Operating cost per tick, in tokens.
-    miner_cost_per_tick: float = 1.5
-    validator_cost_per_tick: float = 1.5
+    miner_cost_per_tick: float = 36.0
+    validator_cost_per_tick: float = 36.0
 
     # Transactions one user wants to make per tick.
-    user_tx_per_tick: float = 6.0
+    user_tx_per_tick: float = 144.0
 
     # 0..1 — how much a trader amplifies price noise.
     trader_aggressiveness: float = 0.5
 
     # How fast developers improve network capacity, per tick, per developer.
-    dev_improvement_rate: float = 0.0004
+    dev_improvement_rate: float = 0.0096
 
     # Hysteresis: an agent must be unprofitable for N ticks before leaving.
     exit_patience_ticks: int = 3
@@ -195,8 +195,8 @@ class SimConfig:
     seed: int = 42
 
     # Visual grid size. Cells, not agents: a cell can hold a cohort.
-    rows: int = 20
-    cols: int = 40
+    rows: int = 30
+    cols: int = 30
 
     network: NetworkParams = field(default_factory=NetworkParams)
     monetary: MonetaryParams = field(default_factory=MonetaryParams)
@@ -219,8 +219,8 @@ class SimConfig:
 
     @property
     def blocks_per_tick(self) -> float:
-        """How many blocks a healthy network produces in one simulated hour."""
-        return 3600.0 / max(self.network.block_time_s, 0.001)
+        """How many blocks a healthy network produces in one simulated day."""
+        return 86400.0 / max(self.network.block_time_s, 0.001)
 
     def to_dict(self) -> dict:
         """Plain dict, used for hashing and for saving a run's configuration."""
@@ -267,8 +267,8 @@ BITCOIN_2009 = SimConfig(
         n_traders=60,
         n_developers=20,
         n_attackers=5,
-        miner_cost_per_tick=1.5,
-        user_tx_per_tick=4.0,
+        miner_cost_per_tick=36.0,
+        user_tx_per_tick=96.0,
     ),
     social=SocialParams(
         liquidity=500_000.0,
@@ -394,7 +394,7 @@ CHAOS_SANDBOX = SimConfig(
         n_traders=200,
         n_developers=20,
         n_attackers=40,
-        miner_cost_per_tick=2.0,
+        miner_cost_per_tick=48.0,
     ),
     social=SocialParams(liquidity=100_000.0, price_sigma=0.05),
     events=EventParams(probability_scale=3.0),
@@ -412,6 +412,17 @@ PRESETS: dict[str, SimConfig] = {
     "Solana 2020": SOLANA_2020,
     "Stable Utility Coin": STABLE_UTILITY,
     "Chaos Sandbox": CHAOS_SANDBOX,
+}
+
+# Which achievement unlocks which preset. A preset not listed here (or listed
+# with None) is always available. Blank Canvas is the starter and is never
+# locked, so a new player always has somewhere to begin.
+# Presets not listed here are permanently locked (mystery) until a discovery
+# target is added for them. Blank Canvas and Chaos Sandbox are always open.
+PRESET_UNLOCKS: dict[str, str | None] = {
+    "Blank Canvas": None,
+    "Chaos Sandbox": None,
+    "Bitcoin 2009": "genesis_discovery",
 }
 
 # The library's default is the same object as the Blank Canvas preset, so

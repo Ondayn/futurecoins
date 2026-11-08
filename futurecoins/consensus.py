@@ -86,9 +86,9 @@ def produce(
 ) -> BlockProduction:
     """Produce one tick of blocks and split the rewards.
 
-    Rewards use **expected value**, not a per-block lottery. With six blocks per
-    hour and 150 miners, a lottery would leave most miners earning nothing for
-    hours and turn the grid into noise. Expected value keeps aggregate behaviour
+    Rewards use **expected value**, not a per-block lottery. With 144 blocks per
+    day and 150 miners, a lottery would leave most miners earning nothing for
+    days and turn the grid into noise. Expected value keeps aggregate behaviour
     correct and individual behaviour readable. The UI says so explicitly.
 
     Parameters
@@ -150,7 +150,19 @@ def security_margin(config: SimConfig, agents: list[Agent], avail: float) -> flo
     This is deliberately crude. It is a teaching proxy, not a security audit.
     """
     if config.network.consensus == "pos":
-        return avail
+        # PoS security = availability, but penalised by concentration: a single
+        # staker with all the stake is not secure no matter how much is online.
+        _, total_stake = producer_capacity(agents)
+        if total_stake <= 0:
+            return 0.0
+        producers, _ = producer_capacity(agents)
+        # Herfindahl of capacity shares: 1.0 = one producer owns everything.
+        concentration = sum((a.capacity / total_stake) ** 2 for a in producers)
+        return avail * (1.0 - concentration)
 
-    producers, _ = producer_capacity(agents)
-    return min(1.0, len(producers) / 50.0)
+    producers, total_cap = producer_capacity(agents)
+    if total_cap <= 0:
+        return 0.0
+    # PoW security = producer count, penalised by concentration.
+    concentration = sum((a.capacity / total_cap) ** 2 for a in producers)
+    return min(1.0, len(producers) / 50.0) * (1.0 - concentration)

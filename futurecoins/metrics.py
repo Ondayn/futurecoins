@@ -42,6 +42,7 @@ class Metrics:
     reliability: float = 1.0
     concentration: float = 1.0
     security: float = 0.0
+    capacity_multiplier: float = 1.0
 
     block_interval: float = 0.0
     tps: float = 0.0

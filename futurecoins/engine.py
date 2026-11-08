@@ -10,12 +10,12 @@ exact run that earned it.
 
 Time model
 ----------
-1 tick = 1 simulated hour. Blocks are produced *inside* the tick:
+1 tick = 1 simulated day. Blocks are produced *inside* the tick:
 
-    blocks_per_tick = 3600 / block_time_s
+    blocks_per_tick = 86400 / block_time_s
 
-So a 600-second block time gives 6 blocks per tick, and a simulated year is
-8 760 ticks. See docs/ARCHITECTURE.md section 4.
+So a 600-second block time gives 144 blocks per tick, and a simulated year is
+365 ticks. See docs/ARCHITECTURE.md section 4.
 """
 
 from __future__ import annotations
@@ -30,6 +30,15 @@ from .config import SimConfig
 from .economy import EconomyState, MempoolOutcome, clamp
 from .events import EventEngine, EventLogEntry
 from .metrics import Metrics, network_health
+
+# Mood thresholds for the roles that are neither producers nor users. The pair
+# is (leave below this sentiment, come back above this sentiment). Traders chase
+# attention and leave a boring market first; developers are the most committed.
+# Attackers are handled separately: they follow victims, not mood.
+_FOLLOWER_RULES: dict[Role, tuple[float, float]] = {
+    Role.TRADER: (0.30, 0.55),
+    Role.DEVELOPER: (0.20, 0.45),
+}
 
 
 @dataclass(frozen=True)
@@ -88,6 +97,12 @@ class Simulation:
         self.last_production = consensus.BlockProduction()
         self.last_mempool = MempoolOutcome()
 
+        # A network dies when no agent is left online. This is terminal: the
+        # engine refuses to advance until `reset()` is called.
+        self.ended = False
+        self.end_reason = ""
+        self._low_health_streak = 0
+
         self._metrics = self._compute_metrics(
             production=consensus.BlockProduction(),
             mempool=MempoolOutcome(),
@@ -95,6 +110,7 @@ class Simulation:
             reliability=1.0,
             security=0.0,
             concentration=1.0,
+            capacity_multiplier=1.0,
         )
         self.history.append(self._metrics)
 
@@ -114,8 +130,32 @@ class Simulation:
     def circulating_supply(self) -> float:
         return self.total_supply - self.treasury
 
+    @property
+    def active_nodes(self) -> int:
+        """How many agents are currently online."""
+        return sum(1 for agent in self.agents if agent.active)
+
+    @property
+    def is_dead(self) -> bool:
+        """True when every agent has gone offline.
+
+        A network with nobody left cannot produce a block, send a transaction,
+        or recover on its own: no one is there to react to better conditions.
+        That is why this is terminal rather than a temporary low point.
+        """
+        return self.active_nodes == 0
+
     def run_tick(self) -> TickResult:
-        """Advance the simulation by one simulated hour."""
+        """Advance the simulation by one simulated day."""
+        if self.ended:
+            # A dead network has no clock. Return the final snapshot so callers
+            # that poll in a loop cannot resurrect it by accident.
+            return TickResult(
+                tick=self.tick,
+                metrics=self._metrics,
+                changes=tuple(self.recent_changes)[-3:],
+            )
+
         self.tick += 1
         previous = self._metrics.as_dict()
 
@@ -131,7 +171,10 @@ class Simulation:
 
         # 2. Capacity for this tick. Slow block production means less room.
         base_availability = consensus.availability(self.config, self.agents)
-        availability = base_availability * (1.0 - outcome.producer_exit)
+        # Health feeds back into availability: a sick network produces fewer
+        # blocks. This closes the health -> reliability -> health loop.
+        health_factor = 0.3 + 0.7 * (self._metrics.health / 100.0)
+        availability = base_availability * (1.0 - outcome.producer_exit) * health_factor
 
         blocks = self.config.blocks_per_tick * availability
         capacity = (
@@ -147,7 +190,8 @@ class Simulation:
             self.agents,
             self.economy.sentiment,
             self.economy.adoption,
-            mods.activity,
+            price=self.economy.price,
+            activity_multiplier=mods.activity,
         )
 
         # 4. Mempool: price the transactions, decide how many fit.
@@ -191,7 +235,12 @@ class Simulation:
         # 9. Agents react.
         self._update_producer_behaviour(production, availability)
         self._update_user_behaviour(mempool)
+        self._update_follower_behaviour()
         self._update_developers()
+        # Micro-churn: a small fraction of users toggle state each tick, so the
+        # grid visibly changes even in a steady-state network. Deterministic,
+        # because it draws from the seeded rng.
+        self._apply_micro_churn()
 
         # 10. Economy reacts to this tick's activity.
         participation = self._participation()
@@ -205,6 +254,47 @@ class Simulation:
             security=security,
             sentiment=self.economy.sentiment,
         )
+
+        # Currency failure: a currency dies when nobody uses it, nobody
+        # secures it, or health stays critically low. End with a clear message.
+        users_active = len(active_agents(self.agents, Role.USER))
+
+        failed = False
+        reason = ""
+        if users_active == 0 and self.tick > 5:
+            failed = True
+            reason = "Currency failed: no users left — the currency has no demand."
+        elif health < 15.0:
+            self._low_health_streak += 1
+            if self._low_health_streak >= 5:
+                failed = True
+                reason = (
+                    f"Currency failed: network health stayed below 15 for "
+                    f"{self._low_health_streak} consecutive ticks."
+                )
+        else:
+            self._low_health_streak = 0
+
+        if failed:
+            self._end_network(reason)
+            self._metrics = self._compute_metrics(
+                production=production,
+                mempool=mempool,
+                availability=availability,
+                reliability=reliability,
+                security=security,
+                concentration=production.concentration,
+                capacity_multiplier=self.capacity_multiplier,
+            )
+            self.history.append(self._metrics)
+            self.last_production = production
+            self.last_mempool = mempool
+            return TickResult(
+                tick=self.tick,
+                metrics=self._metrics,
+                events=tuple(outcome.entries),
+                changes=tuple(self.recent_changes)[-3:],
+            )
 
         supply_denominator = max(self.total_supply, production.issuance, 1.0)
         economy.update_economy(
@@ -230,6 +320,7 @@ class Simulation:
             reliability=reliability,
             security=security,
             concentration=production.concentration,
+            capacity_multiplier=self.capacity_multiplier,
         )
         self.history.append(self._metrics)
         if len(self.history) > 2000:
@@ -237,6 +328,11 @@ class Simulation:
 
         self.last_production = production
         self.last_mempool = mempool
+
+        # 12. If nobody is left online, the run is over. This is checked after
+        #     the behaviour step so the final tick is still fully recorded.
+        if self.is_dead:
+            self._end_network()
 
         changes = tuple(self.recent_changes)[-3:]
         return TickResult(
@@ -247,12 +343,39 @@ class Simulation:
         )
 
     def run(self, ticks: int) -> list[TickResult]:
-        """Advance several ticks. Used by tests and by the fast-forward button."""
-        return [self.run_tick() for _ in range(max(0, ticks))]
+        """Advance several ticks, stopping early if the network dies."""
+        if self.ended:
+            return []
+
+        results: list[TickResult] = []
+        for _ in range(max(0, ticks)):
+            results.append(self.run_tick())
+            if self.ended:
+                break
+        return results
 
     # ------------------------------------------------------------------
     # Behaviour
     # ------------------------------------------------------------------
+
+    def _end_network(self, reason: str | None = None) -> None:
+        """Mark the run as terminal.
+
+        ``reason`` overrides the default "everyone went offline" message for the
+        other failure modes (no users, no producers, health collapsed).
+        """
+        self.ended = True
+        if reason:
+            self.end_reason = reason
+        else:
+            self.end_reason = (
+                "Every agent went offline. With no one left to produce blocks, "
+                "send transactions, or react to better conditions, the network "
+                "cannot restart."
+            )
+        self.recent_changes.append(
+            f"Tick {self.tick} · network ended: {self.end_reason}"
+        )
 
     def _participation(self) -> float:
         total = len(self.agents)
@@ -415,6 +538,54 @@ class Simulation:
                     agent.streak_good = 0
                     agent.confidence = 0.5
 
+    def _update_follower_behaviour(self) -> None:
+        """Traders, developers and attackers can also go offline.
+
+        Without this, a network whose producers and users had all left would
+        still show traders, developers and attackers on the grid forever, and
+        the "everyone is dead" ending could never happen.
+
+        Traders and developers follow sentiment with hysteresis. Attackers
+        follow *victims*: an attacker with no users or traders left to target
+        has no reason to stay online.
+        """
+        cfg = self.config
+        sentiment = self.economy.sentiment
+        victims = len(active_agents(self.agents, Role.USER)) + len(
+            active_agents(self.agents, Role.TRADER)
+        )
+
+        for agent in self.agents:
+            if agent.role is not Role.ATTACKER and agent.role not in _FOLLOWER_RULES:
+                continue
+            if agent.cooldown > 0:
+                agent.cooldown -= 1
+                continue
+
+            if agent.role is Role.ATTACKER:
+                worth_it = victims > 0
+            else:
+                exit_below, enter_above = _FOLLOWER_RULES[agent.role]
+                threshold = enter_above if not agent.active else exit_below
+                worth_it = sentiment >= threshold
+
+            if agent.active:
+                if worth_it:
+                    agent.streak_bad = 0
+                else:
+                    agent.streak_bad += 1
+                    if agent.streak_bad >= cfg.agents.exit_patience_ticks:
+                        agent.active = False
+                        agent.streak_bad = 0
+            else:
+                if worth_it:
+                    agent.streak_good += 1
+                    if agent.streak_good >= cfg.agents.entry_patience_ticks:
+                        agent.active = True
+                        agent.streak_good = 0
+                else:
+                    agent.streak_good = 0
+
     def _update_developers(self) -> None:
         """Developers slowly raise capacity. This is the 'upgrade' abstraction."""
         devs = len(active_agents(self.agents, Role.DEVELOPER))
@@ -422,6 +593,31 @@ class Simulation:
             return
         growth = self.config.agents.dev_improvement_rate * (devs / 100.0)
         self.capacity_multiplier = min(3.0, self.capacity_multiplier * (1.0 + growth))
+
+    def _apply_micro_churn(self) -> None:
+        """A tiny fraction of users toggle state each tick.
+
+        Real networks have nodes that come and go for reasons beyond
+        profitability (maintenance, connectivity, attention). Without this the
+        grid looks frozen even when the simulation is running. The toggle is
+        deterministic because it draws from the seeded rng, and it respects
+        cooldowns so it never fights the hysteresis rules. It never resurrects
+        a dead network.
+        """
+        if self.is_dead:
+            return
+        users = [a for a in self.agents if a.role is Role.USER]
+        if not users:
+            return
+        # ~1.5 % of users may toggle, at most 3 per tick.
+        candidates = self.rng.sample(users, min(len(users), max(1, len(users) // 60)))
+        for agent in candidates:
+            if agent.cooldown > 0:
+                continue
+            agent.active = not agent.active
+            agent.streak_bad = 0
+            agent.streak_good = 0
+            agent.cooldown = 1
 
     # ------------------------------------------------------------------
     # Metrics
@@ -436,6 +632,7 @@ class Simulation:
         reliability: float,
         security: float,
         concentration: float,
+        capacity_multiplier: float = 1.0,
     ) -> Metrics:
         total_nodes = len(self.agents)
         active_nodes = sum(1 for a in self.agents if a.active)
@@ -456,8 +653,8 @@ class Simulation:
 
         inflation_rate = 0.0
         if total_supply > 1.0:
-            # Annualised: 8 760 ticks in a simulated year.
-            inflation_rate = (production.issuance * 8760.0 / total_supply) * 100.0
+            # Annualised: 365 ticks in a simulated year.
+            inflation_rate = (production.issuance * 365.0 / total_supply) * 100.0
 
         return Metrics(
             tick=self.tick,
@@ -476,8 +673,9 @@ class Simulation:
             reliability=reliability,
             concentration=concentration,
             security=security,
+            capacity_multiplier=capacity_multiplier,
             block_interval=block_interval,
-            tps=mempool.included / 3600.0,
+            tps=mempool.included / 86400.0,
             avg_fee=mempool.fee,
             congestion=mempool.congestion,
             blocks_total=self.total_blocks,

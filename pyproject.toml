@@ -1,27 +1,27 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "futurecoins"
 version = "0.1.0"
-description = "An educational cryptocurrency simulation game"
-readme = "README.md"
+description = "Educational cryptocurrency simulation game"
 requires-python = ">=3.11"
-license = { text = "MIT" }
 dependencies = [
-    "streamlit>=1.37,<2",
+    "streamlit>=1.60",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.14",
+]
 
 [tool.setuptools.packages.find]
 include = ["futurecoins*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
 
 [tool.ruff]
 line-length = 100

@@ -47,8 +47,8 @@ change mid-run" — a guarantee that removes a whole class of bugs.
 
 - [ ] `simulation/grid.py`: `project()` — agents → cells, with cohorts.
 - [ ] `render_html()` producing the CSS grid. No Streamlit import in this file.
-- [ ] **Verify:** population 4 000 on a 40×20 grid shows "~5 agents/cell" and still renders
-      800 cells.
+- [ ] **Verify:** population 4 000 on a 30×30 grid shows "~5 agents/cell" and still renders
+      900 cells.
 - [ ] `app.py`: `st.session_state` holds one `Simulation`; sidebar has Run/Pause/Reset.
 - [ ] `@st.fragment(run_every="1s")` renders grid + metrics.
 - [ ] **Verify:** RUN animates, PAUSE stops, RESET restores tick 0.
@@ -116,7 +116,7 @@ makes it educational instead of a guessing game.
 
 - [ ] `conditions.py`: pure predicates over `RunSummary`.
 - [ ] `manager.py`: evaluate, dedupe by id, persist JSON.
-- [ ] `snapshots.py`: 800-char grid encoding.
+- [ ] `snapshots.py`: 900-char grid encoding.
 - [ ] **Verify:** a predicate that is false never awards; running twice never duplicates.
 
 **Learning:** "idempotent" means doing it twice has the same effect as doing it once.

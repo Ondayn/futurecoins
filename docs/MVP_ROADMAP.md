@@ -67,7 +67,7 @@ why "pure function" makes tests trivial.
 - ASCII fallback toggle.
 
 **Acceptance:** press RUN, the grid changes every second, population counter is correct
-when population > 800, pause actually pauses.
+when population > 900, pause actually pauses.
 
 **You learn:** Streamlit's rerun model, `session_state`, fragments, why a fixed CSS cell
 width beats monospace alignment for emoji.
@@ -131,7 +131,7 @@ scoring model.
 **Build:**
 - `conditions.py`: pure predicates.
 - `manager.py`: evaluate after each tick, dedupe, award, persist to `data/achievements.json`.
-- `snapshots.py`: 800-char grid encoding.
+- `snapshots.py`: 900-char grid encoding.
 - Three achievements: First Currency, Survivor, Genesis Discovery.
 
 **Acceptance:** an achievement cannot be awarded when its predicate is false; re-running

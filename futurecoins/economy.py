@@ -59,18 +59,29 @@ def generate_demand(
     agents: list[Agent],
     sentiment: float,
     adoption: float,
+    price: float = 100.0,
     activity_multiplier: float = 1.0,
 ) -> float:
     """Transactions users want to make this tick.
 
-    Three things raise demand: more active users, a better mood (people use
-    things they feel good about), and higher adoption. One thing lowers it:
-    events that suppress activity.
+    Things that raise demand: more active users, a better mood, higher adoption.
+    Things that lower it: events that suppress activity, and a higher price
+    (price elasticity — expensive networks see less usage).
     """
     users = active_agents(agents, Role.USER)
     if not users:
         return 0.0
-    return len(users) * config.agents.user_tx_per_tick * (0.5 + sentiment) * adoption * activity_multiplier
+    # Price elasticity: demand falls as price rises. Elasticity of 0.3 means
+    # doubling the price reduces demand by ~19%.
+    price_factor = (100.0 / max(price, 1.0)) ** 0.3
+    return (
+        len(users)
+        * config.agents.user_tx_per_tick
+        * (0.5 + sentiment)
+        * adoption
+        * price_factor
+        * activity_multiplier
+    )
 
 
 def settle_mempool(
@@ -139,7 +150,8 @@ def update_economy(
     # Sentiment chases a target set by network health plus whatever the media
     # and recent events are doing. It never teleports: adaptivity is the damping.
     target_sentiment = clamp(
-        0.5 + 0.5 * (health - 50.0) / 50.0 + social.media_bias + sentiment_shock,
+        0.5 + 0.5 * (health - 50.0) / 50.0 + social.media_bias + sentiment_shock
+        + 0.3 * clamp(state.last_log_return * 5.0, -0.15, 0.15),
         0.0,
         1.0,
     )
@@ -160,7 +172,9 @@ def update_economy(
     # The index mean-reverts towards a "fundamental" level set by adoption and
     # utilisation. Without this anchor, any constant sentiment offset would
     # compound forever: a 5 % nudge per tick is a 12,000x rise in a year.
-    fundamental = 100.0 * state.adoption * (0.8 + 0.4 * clamp(utilisation, 0.0, 1.5))
+    # A failed network has no fundamental value: health scales the anchor.
+    health_factor = 0.1 + 0.9 * clamp(health / 100.0, 0.0, 1.0)
+    fundamental = 100.0 * state.adoption * (0.8 + 0.4 * clamp(utilisation, 0.0, 1.5)) * health_factor
     fundamental = max(fundamental, 1.0)
 
     # A thin market moves more for the same flow. Deep liquidity dampens the

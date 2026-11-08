@@ -118,21 +118,21 @@ That boundary is what keeps the UI dumb and the engine testable.
 
 ## 4. Time model — the most important convention
 
-**1 tick = 1 simulated hour.**
+**1 tick = 1 simulated day.**
 
 ```
-blocks_per_tick = 3600 / block_time_s
+blocks_per_tick = 86400 / block_time_s
 tx_capacity_per_tick = tx_per_block * blocks_per_tick
 ```
 
 | Network | Block time | Blocks / tick | Why |
 | --- | --- | --- | --- |
-| Bitcoin-like | 600 s | 6 | 10-minute blocks |
-| Ethereum-like | 12 s | 300 | slot time |
-| Solana-like | 0.4 s | 9 000 | sub-second slots |
+| Bitcoin-like | 600 s | 144 | 10-minute blocks |
+| Ethereum-like | 12 s | 7 200 | slot time |
+| Solana-like | 0.4 s | 216 000 | sub-second slots |
 
 Consequences:
-- One simulated year = **8 760 ticks**. Reachable with a "simulate 500 ticks" button.
+- One simulated year = **365 ticks**. Reachable with a "simulate 500 ticks" button.
 - Economic and social dynamics (sentiment, adoption) update at a human timescale.
 - `block_time` stays a *protocol parameter*, and TPS is derived from demand and capacity —
   the two metrics stay conceptually distinct, which is the lesson.
@@ -378,22 +378,39 @@ def render_html(grid, legend) -> str:
 ```
 
 ```html
-<div class="fc-grid" style="--fc-cols:40">
-  <span class="fc-cell fc-role-miner" title="Cell 12,7 · 6 agents · 4 active">⛏️</span>
+<div class="fc-grid" style="--fc-cols:30;--fc-rows:30">
+  <span class="fc-cell fc-miner" title="Cell 12,7 · 6 agents · 4 active">⛏️</span>
+  <span class="fc-cell fc-empty" title="3 offline agents · hidden"></span>
+  <span class="fc-cell fc-slot">·</span>
   ...
 </div>
 ```
 
 ```css
-.fc-grid { display: grid; grid-template-columns: repeat(var(--fc-cols), 1.45em); gap: 2px; }
-.fc-cell { width: 1.45em; height: 1.45em; display: grid; place-items: center;
-           font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
-           transition: opacity .25s ease, transform .25s ease; }
-.fc-role-miner { color: #ffb347; }
+.fc-grid { display: grid; grid-template-columns: repeat(var(--fc-cols), minmax(0, 1fr));
+           width: min(100%, var(--fc-grid-max)); aspect-ratio: var(--fc-cols) / var(--fc-rows);
+           container-type: size; }
+.fc-cell { display: grid; place-items: center; font-size: min(2.2cqw, 1.5rem); }
+.fc-empty { background: transparent; }   /* an agent went offline */
+.fc-slot  { color: #1e2d4a; }             /* no agent was ever assigned */
 ```
 
-A CSS grid with a fixed cell width removes the alignment problem entirely. Opacity encodes
-activity, a ring encodes "inactive", colour encodes role.
+A CSS grid with fluid, equal cells removes the alignment problem entirely. Opacity encodes
+how much of a cohort is active, colour encodes role, and offline agents are blank rather
+than greyed out — the board shows the network that is running, not the one that used to.
+
+The board is sized from the height first: `--fc-grid-max` is the budget left after the
+hero, the indicator cards, the population line and the legend, and `aspect-ratio` turns
+that height into a width. A 30 × 30 board therefore fits one screen without scrolling
+instead of growing until the page does.
+
+On wide screens (more than 1200 px and a landscape viewport) the board sits in the left
+column of a two-column split, and that column is **exactly as wide as the board**. The
+remainder of the width goes to the tab panel and its chart, so shrinking the board to fit
+the height makes the graph wider rather than leaving empty space beside it. The columns
+never wrap: if they did, the tab panel would fall below the board. On narrow or
+portrait-ish screens the split stacks, and the page may scroll — that is the deliberate
+trade-off for keeping the board readable.
 
 Rendered with `st.html(...)` (not `st.markdown(unsafe_allow_html=True)`), so the block
 gets its own scoped container. All classes are prefixed `fc-` to avoid collisions.
@@ -416,7 +433,7 @@ the medium and keeps the engine fast.
 
 ### 8.4 What Streamlit cannot do (and we accept)
 
-- **Click a cell to inspect an agent.** A widget per cell is impossible at 800 cells.
+- **Click a cell to inspect an agent.** A widget per cell is impossible at 900 cells.
   MVP workaround: an "Inspect" panel with a selectbox of agent IDs + a sortable table.
   Post-MVP: a custom component, if it is ever worth the JavaScript.
 - **60 fps.** Requires a custom component or a canvas. Rejected for the MVP (see §10).
