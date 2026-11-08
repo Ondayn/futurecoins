@@ -70,21 +70,25 @@ def project(
     """Project agents onto a 1:1 grid.
 
     Returns (grid, display_pos_by_agent_id, sampled_count). When the population
-    exceeds grid capacity, a deterministic sampled subset is displayed in unique
-    cells (display positions are assigned for the view).
+    exceeds grid capacity, a deterministic sampled subset is displayed. Display
+    placement is deterministically shuffled (stable for seed+population view) so
+    the grid keeps a natural scattered look.
     """
+    import random as _random
+
     displayed = sample_agents(agents, rows, cols, seed)
     sampled_count = len(displayed)
     grid: list[list[Cell | None]] = [[None] * cols for _ in range(rows)]
     display_pos: dict[int, tuple[int, int]] = {}
 
-    # Assign displayed agents to unique cells in row-major order for a stable,
-    # readable layout (independent of their canonical/stored positions).
+    # Deterministic random-looking placement (local RNG, does not touch sim state).
+    cells = [(r, c) for r in range(rows) for c in range(cols)]
+    _random.Random(seed ^ 0x5F3759DF).shuffle(cells)
+
     for idx, agent in enumerate(displayed):
-        r = idx // cols
-        c = idx % cols
-        if r >= rows:
+        if idx >= len(cells):
             break
+        r, c = cells[idx]
         display_pos[agent.id] = (r, c)
         grid[r][c] = Cell(
             row=r,
