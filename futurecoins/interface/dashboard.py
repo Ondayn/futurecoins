@@ -160,20 +160,29 @@ def cards_html(metrics: Metrics, config: SimConfig) -> str:
 
 
 def health_bars_html(metrics: Metrics) -> str:
-    """The five components of the health score, with their weights visible."""
+    """Components of cryptocurrency network health (model), with weights visible."""
     rows: list[str] = []
-    for label, value, weight in health_breakdown(
+    stress = getattr(metrics, "economic_stress", 0.0)
+    for label, value, weight, note in health_breakdown(
         metrics.participation,
         metrics.concentration,
         metrics.reliability,
         metrics.security,
         metrics.sentiment,
+        economic_stress=stress,
     ):
+        if weight > 0:
+            mid = f"<span class='fc-mono'>({weight:.0%})</span>"
+            suffix = f"<span class='fc-mono'>{value * 100:,.0f}%</span>"
+        else:
+            mid = "<span class='fc-mono'>penalty</span>"
+            suffix = f"<span class='fc-mono'>-{value * 50:,.0f} max impact</span>"
+        extra = f' title="{html.escape(note)}"' if note else ""
         rows.append(
-            '<div class="fc-bar-row">'
-            f"<span>{html.escape(label)} <span class='fc-mono'>({weight:.0%})</span></span>"
+            f'<div class="fc-bar-row"{extra}>'
+            f"<span>{html.escape(label)} {mid}</span>"
             f'<span class="fc-bar"><span style="width:{value * 100:.1f}%"></span></span>'
-            f"<span class='fc-mono'>{value * 100:,.0f}%</span>"
+            f"{suffix}"
             "</div>"
         )
     return '<div class="fc-bars">' + "".join(rows) + "</div>"

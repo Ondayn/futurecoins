@@ -224,14 +224,25 @@ def _beginner_widgets() -> None:
         key="cfg_base_fee",
         help=glossary_short("Fee"),
     )
-    st.slider(
+    pop = st.slider(
         "Population (agents)",
         min_value=50,
         max_value=5_000,
         step=1,
         key="cfg_population",
-        help="Total agents on the grid. When this exceeds the number of cells, each cell represents a cohort.",
+        help="Total agents. If population exceeds grid cells (900), the grid shows a deterministic 1:1 sampled view; real totals still count.",
     )
+    if pop > 3000:
+        st.warning(
+            "Very high starting population for a new network (unrealistic for genesis). "
+            "Consider 200–1,200 for clearer dynamics; large populations can mask early effects.",
+            icon="⚠️",
+        )
+    elif pop > 1200:
+        st.info(
+            "Large starting population. For a first run, 200–900 agents is often more realistic and easier to interpret.",
+            icon="ℹ️",
+        )
 
 
 def _advanced_widgets() -> None:
@@ -406,6 +417,18 @@ def render_controls() -> SimConfig:
             Role.DEVELOPER: int(st.session_state["cfg_n_developers"]),
             Role.ATTACKER: int(st.session_state["cfg_n_attackers"]),
         }
+        total_pop = sum(counts.values())
+        if total_pop > 3000:
+            st.warning(
+                "Very high starting population for a new network (unrealistic for genesis). "
+                "Consider 200–1,200 for clearer dynamics.",
+                icon="⚠️",
+            )
+        elif total_pop > 1200:
+            st.info(
+                "Large starting population. For a first run, 200–900 agents is often more realistic.",
+                icon="ℹ️",
+            )
         tx_per_block = int(st.session_state["cfg_tx_per_block"])
         burn_rate = float(st.session_state["cfg_burn_rate"])
         seed = int(st.session_state["cfg_seed"])

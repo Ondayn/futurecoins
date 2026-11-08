@@ -29,7 +29,7 @@ from .agents import Agent, Role, active_agents, make_population
 from .config import SimConfig
 from .economy import EconomyState, MempoolOutcome, clamp
 from .events import EventEngine, EventLogEntry
-from .metrics import Metrics, network_health
+from .metrics import Metrics, compute_economic_stress, network_health
 
 # Mood thresholds for the roles that are neither producers nor users. The pair
 # is (leave below this sentiment, come back above this sentiment). Traders chase
@@ -203,30 +203,45 @@ class Simulation:
         #    accurate for Bitcoin's first months.
         users = active_agents(self.agents, Role.USER)
         user_pool = sum(a.balance for a in users)
-        paid_fees = min(mempool.fees_pool, max(0.0, user_pool))
-        if user_pool > 0 and paid_fees > 0:
-            for user in users:
-                user.balance -= paid_fees * (user.balance / user_pool)
+        payable_fees = min(mempool.fees_pool, max(0.0, user_pool))
 
-        # 6. Block production and rewards.
+        # 6. Block production and rewards (uses payable_fees as the fee pool).
         production = consensus.produce(
             self.config,
             self.agents,
             total_blocks=self.total_blocks,
             total_supply=self.total_supply,
-            fees_pool=paid_fees,
+            fees_pool=payable_fees,
             availability_override=availability,
         )
 
-        # 7. Apply rewards, fees and burns to balances and supply.
+        # 7. Settle fees: only charge what is actually distributed or burned.
+        #    If there are no producers to receive fees, undistributable fees are
+        #    not collected (conservation; no blocks means no fee settlement).
+        fees_distributed = sum(production.fees_by_agent.values())
+        intended_burn = payable_fees * self.config.monetary.burn_rate
+        settled_fees = fees_distributed + intended_burn
+        if settled_fees > payable_fees + 1e-9:
+            settled_fees = payable_fees
+            intended_burn = max(0.0, settled_fees - fees_distributed)
+        if settled_fees < payable_fees - 1e-9 and fees_distributed <= 1e-12 and production.blocks <= 0:
+            # No block production/producers to settle fees: do not collect.
+            settled_fees = 0.0
+            intended_burn = 0.0
+            fees_distributed = 0.0
+
+        if user_pool > 0 and settled_fees > 0:
+            for user in users:
+                user.balance -= settled_fees * (user.balance / user_pool)
+
+        # Apply rewards and distributed fees to balances and supply.
         for agent_id, amount in production.reward_by_agent.items():
             self._by_id[agent_id].balance += amount
         for agent_id, amount in production.fees_by_agent.items():
             self._by_id[agent_id].balance += amount
 
         self.issuance_total += production.issuance
-        burned = paid_fees * self.config.monetary.burn_rate
-        self.burn_total += burned
+        self.burn_total += intended_burn
         self.total_blocks += production.blocks
 
         # 8. Producers sell part of their income to pay operating costs. This is
@@ -251,12 +266,20 @@ class Simulation:
         security = consensus.security_margin(self.config, self.agents, availability)
         reliability = self._reliability(mempool)
 
+        supply_denominator = max(self.total_supply, production.issuance, 1.0)
+        inflation_rate_est = (
+            (production.issuance * 365.0 / max(self.total_supply, 1.0)) * 100.0
+            if self.total_supply > 1.0
+            else 0.0
+        )
+        economic_stress = compute_economic_stress(inflation_rate_est, self.economy.volatility)
         health = network_health(
             participation=participation,
             concentration=production.concentration,
             reliability=reliability,
             security=security,
             sentiment=self.economy.sentiment,
+            economic_stress=economic_stress,
         )
 
         # Currency failure: a currency dies when nobody uses it, nobody
@@ -300,7 +323,6 @@ class Simulation:
                 changes=tuple(self.recent_changes)[-3:],
             )
 
-        supply_denominator = max(self.total_supply, production.issuance, 1.0)
         economy.update_economy(
             self.economy,
             self.config,
@@ -699,18 +721,20 @@ class Simulation:
             self.config.network.block_time_s / availability if availability > 0 else 0.0
         )
 
+        inflation_rate = 0.0
+        if total_supply > 1.0:
+            # Annualised: 365 ticks in a simulated year.
+            inflation_rate = (production.issuance * 365.0 / total_supply) * 100.0
+
+        economic_stress = compute_economic_stress(inflation_rate, self.economy.volatility)
         health = network_health(
             participation=participation,
             concentration=concentration,
             reliability=reliability,
             security=security,
             sentiment=self.economy.sentiment,
+            economic_stress=economic_stress,
         )
-
-        inflation_rate = 0.0
-        if total_supply > 1.0:
-            # Annualised: 365 ticks in a simulated year.
-            inflation_rate = (production.issuance * 365.0 / total_supply) * 100.0
 
         return Metrics(
             tick=self.tick,
@@ -730,6 +754,7 @@ class Simulation:
             concentration=concentration,
             security=security,
             capacity_multiplier=capacity_multiplier,
+            economic_stress=economic_stress,
             block_interval=block_interval,
             tps=mempool.included / 86400.0,
             avg_fee=mempool.fee,

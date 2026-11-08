@@ -391,13 +391,13 @@ def live_view() -> None:
         metrics = sim.metrics
         st.markdown("#### Network health breakdown")
         if sim.tick == 0:
-            st.html('<div class="fc-note">Run the simulation to see the health breakdown. '
-                    'Components (participation, decentralization, reliability, security, sentiment) '
-                    'are weighted into a single score once the network has activity.</div>')
+            st.html('<div class="fc-note">Run the simulation to see the cryptocurrency network health breakdown '
+                    '(not internet). Components (participation, decentralization, reliability, security, sentiment) '
+                    'are weighted, and bad economic choices can add a stress penalty once the network has activity.</div>')
         else:
             st.caption(
-                "The score is a weighted average. Every weight is visible, so you can disagree "
-                "with the formula instead of guessing what it means."
+                "Cryptocurrency network health (model, 0–100), not internet connectivity. "
+                "Weights are visible; extreme inflation/instability can apply an economic stress penalty."
             )
             dashboard.render_health(metrics)
 
@@ -637,7 +637,7 @@ def live_view() -> None:
             "Changing one parameter ripples through several indicators."
         )
         st.markdown(
-            "- **Health → Availability**: a sick network produces fewer blocks.\n"
+            "- **Health → Availability**: a sick cryptocurrency network produces fewer blocks.\n"
             "- **Health → Price**: price anchor scales with health (0 health = 10% value).\n"
             "- **Sentiment → Demand**: better mood → more transactions.\n"
             "- **Sentiment → Price**: rising prices boost sentiment (momentum).\n"
@@ -645,29 +645,36 @@ def live_view() -> None:
             "- **Fees → Churn**: high fees push users to leave.\n"
             "- **Concentration → Security**: concentrated networks are easier to capture.\n"
             "- **Reliability → Sell pressure**: dropped transactions create selling.\n"
+            "- **Bad economics → Health**: extreme inflation or instability adds economic stress (penalty).\n"
             "- **Developers → Capacity**: developers slowly raise throughput."
         )
 
-        st.markdown("#### Health, decomposed")
+        st.markdown("#### Health, decomposed (cryptocurrency network)")
         if sim.tick == 0:
             st.html('<div class="fc-note">Run the simulation to see how health components contribute.</div>')
         else:
             metrics = sim.metrics
-            rows = [
-                {
-                    "Component": label,
-                    "Value": f"{value:.0%}",
-                    "Weight": f"{weight:.0%}",
-                    "Contribution": f"{value * weight * 100:.1f} points",
-                }
-                for label, value, weight in health_breakdown(
-                    metrics.participation,
-                    metrics.concentration,
-                    metrics.reliability,
-                    metrics.security,
-                    metrics.sentiment,
-                )
-            ]
+            rows = []
+            for item in health_breakdown(
+                metrics.participation,
+                metrics.concentration,
+                metrics.reliability,
+                metrics.security,
+                metrics.sentiment,
+                economic_stress=getattr(metrics, "economic_stress", 0.0),
+            ):
+                label, value, weight = item[0], item[1], item[2]
+                note = item[3] if len(item) > 3 else None
+                if weight > 0:
+                    contrib = f"{value * weight * 100:.1f} points"
+                    wtxt = f"{weight:.0%}"
+                else:
+                    contrib = "penalty (reduces total)"
+                    wtxt = "—"
+                row = {"Component": label, "Value": f"{value:.0%}", "Weight": wtxt, "Contribution": contrib}
+                if note:
+                    row["Note"] = note
+                rows.append(row)
             st.dataframe(rows, width="stretch", hide_index=True)
 
         if sim.event_history:

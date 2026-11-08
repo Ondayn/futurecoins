@@ -15,15 +15,15 @@ def test_health_is_bounded() -> None:
 
 def test_health_weights_sum_to_one() -> None:
     breakdown = health_breakdown(0.5, 0.5, 0.5, 0.5, 0.5)
-    assert sum(weight for _, _, weight in breakdown) == pytest.approx(1.0)
-    assert len(breakdown) == 5
+    assert sum(row[2] for row in breakdown[:5]) == pytest.approx(1.0)
+    assert len([r for r in breakdown if r[2] > 0]) == 5
 
 
 def test_decentralization_is_the_inverse_of_concentration() -> None:
     centralized = health_breakdown(1.0, 1.0, 1.0, 1.0, 1.0)
     decentralized = health_breakdown(1.0, 0.0, 1.0, 1.0, 1.0)
-    central_value = next(value for label, value, _ in centralized if label == "Decentralization")
-    free_value = next(value for label, value, _ in decentralized if label == "Decentralization")
+    central_value = next(row[1] for row in centralized if row[0] == "Decentralization")
+    free_value = next(row[1] for row in decentralized if row[0] == "Decentralization")
     assert central_value == 0.0
     assert free_value == 1.0
 

@@ -19,6 +19,14 @@ from dataclasses import asdict, dataclass
 from .economy import clamp
 
 
+def compute_economic_stress(inflation_rate: float, volatility: float) -> float:
+    """0..1 stress from bad economics (extreme inflation, instability)."""
+    # Annualized %; >50%/yr starts to hurt, very high inflation is severe.
+    infl = clamp((abs(inflation_rate) - 50.0) / 250.0, 0.0, 1.0)
+    vol = clamp(volatility / 0.12, 0.0, 1.0)
+    return clamp(0.65 * infl + 0.35 * vol, 0.0, 1.0)
+
+
 @dataclass(frozen=True)
 class Metrics:
     """An immutable snapshot of one tick."""
@@ -43,6 +51,7 @@ class Metrics:
     concentration: float = 1.0
     security: float = 0.0
     capacity_multiplier: float = 1.0
+    economic_stress: float = 0.0
 
     block_interval: float = 0.0
     tps: float = 0.0
@@ -61,24 +70,26 @@ def network_health(
     reliability: float,
     security: float,
     sentiment: float,
+    economic_stress: float = 0.0,
 ) -> float:
-    """A 0..100 composite score.
+    """A 0..100 composite score for the cryptocurrency network (not internet).
 
-    The brief asks for "network health" without defining it. An undefined health
-    score is a vibe, not a lesson — so the weights are explicit and the UI shows
-    them when the player clicks the card.
-
-    Weights: participation 30 %, decentralization 20 %, reliability 25 %,
-    security 15 %, sentiment 10 %.
+    Weights (base): participation 30 %, decentralization 20 %, reliability 25 %,
+    security 15 %, sentiment 10 %. Bad economic choices (extreme inflation,
+    instability) apply an economic stress penalty so unhealthy designs don't read
+    as perfectly healthy.
     """
     decentralization = clamp(1.0 - concentration, 0.0, 1.0)
-    health = 100.0 * (
+    base = 100.0 * (
         0.30 * clamp(participation, 0.0, 1.0)
         + 0.20 * decentralization
         + 0.25 * clamp(reliability, 0.0, 1.0)
         + 0.15 * clamp(security, 0.0, 1.0)
         + 0.10 * clamp(sentiment, 0.0, 1.0)
     )
+    stress = clamp(economic_stress, 0.0, 1.0)
+    # Stress can significantly reduce health (bad economics must have consequences).
+    health = base * (1.0 - 0.50 * stress)
     return clamp(health, 0.0, 100.0)
 
 
@@ -88,12 +99,17 @@ def health_breakdown(
     reliability: float,
     security: float,
     sentiment: float,
-) -> list[tuple[str, float, float]]:
-    """(label, value 0..1, weight) — used by the "why" popover in the UI."""
-    return [
-        ("Participation", clamp(participation, 0.0, 1.0), 0.30),
-        ("Decentralization", clamp(1.0 - concentration, 0.0, 1.0), 0.20),
-        ("Reliability", clamp(reliability, 0.0, 1.0), 0.25),
-        ("Security", clamp(security, 0.0, 1.0), 0.15),
-        ("Sentiment", clamp(sentiment, 0.0, 1.0), 0.10),
+    economic_stress: float = 0.0,
+) -> list[tuple[str, float, float, str | None]]:
+    """(label, value 0..1, weight, note) — used by the "why" UI."""
+    rows: list[tuple[str, float, float, str | None]] = [
+        ("Participation", clamp(participation, 0.0, 1.0), 0.30, None),
+        ("Decentralization", clamp(1.0 - concentration, 0.0, 1.0), 0.20, None),
+        ("Reliability", clamp(reliability, 0.0, 1.0), 0.25, None),
+        ("Security", clamp(security, 0.0, 1.0), 0.15, None),
+        ("Sentiment", clamp(sentiment, 0.0, 1.0), 0.10, None),
     ]
+    stress = clamp(economic_stress, 0.0, 1.0)
+    if stress > 0.001:
+        rows.append(("Economic stress penalty", stress, 0.0, "reduces total health (bad economics)"))
+    return rows
