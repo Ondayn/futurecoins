@@ -82,6 +82,8 @@ def _welcome_screen() -> None:
         "A sandbox: design a cryptocurrency's rules, run a simulation, "
         "and watch what happens to its economy and network."
     )
+    st.html('<div class="fc-note">Hover any card or term for a definition. '
+            'The Glossary tab has 51 terms.</div>')
 
     st.markdown("#### 🎮 How to play")
     st.markdown(

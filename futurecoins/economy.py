@@ -149,12 +149,16 @@ def update_economy(
     # -- sentiment ---------------------------------------------------------
     # Sentiment chases a target set by network health plus whatever the media
     # and recent events are doing. It never teleports: adaptivity is the damping.
-    target_sentiment = clamp(
-        0.5 + 0.5 * (health - 50.0) / 50.0 + social.media_bias + sentiment_shock
+    # Sentiment is "trust". It starts low and rises as the network proves
+    # itself reliable over time. Instantaneous health is a small input; the
+    # dominant driver is sustained uptime and reliability.
+    trust_target = clamp(
+        0.15 + 0.4 * reliability + 0.25 * (health / 100.0) + social.media_bias + sentiment_shock
         + 0.3 * clamp(state.last_log_return * 5.0, -0.15, 0.15),
         0.0,
         1.0,
     )
+    target_sentiment = clamp(trust_target, 0.0, 1.0)
     noise = rng.gauss(0.0, 0.01)
     state.sentiment = clamp(
         state.sentiment + social.sentiment_adaptivity * (target_sentiment - state.sentiment) + noise,

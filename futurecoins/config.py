@@ -134,7 +134,7 @@ class AgentParams:
 class SocialParams:
     """The mood of the market and the wider public."""
 
-    initial_sentiment: float = 0.55
+    initial_sentiment: float = 0.25
 
     # 0..1 — how fast sentiment catches up with reality.
     sentiment_adaptivity: float = 0.15
