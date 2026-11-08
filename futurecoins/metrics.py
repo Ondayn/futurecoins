@@ -113,8 +113,10 @@ def network_health(
         + 0.10 * clamp(sentiment, 0.0, 1.0)
     )
     stress = clamp(economic_stress, 0.0, 1.0)
-    # Stress can significantly reduce health (bad economics must have consequences).
-    health = base * (1.0 - 0.50 * stress)
+    # Economic stress penalizes health, but mild stress acts as a warning signal
+    # rather than collapsing otherwise-viable configs. Severe stress still hurts.
+    penalty = 0.35 * (stress ** 1.5)
+    health = base * (1.0 - penalty)
     return clamp(health, 0.0, 100.0)
 
 

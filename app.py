@@ -194,60 +194,128 @@ def _parameter_insights(sim: Simulation) -> list[str]:
     m = sim.metrics
     notes: list[str] = []
     never_halves = cfg.monetary.halving_interval_blocks >= NEVER / 10
+    stress = float(getattr(m, "economic_stress", 0.0))
+
+    if sim.ended:
+        notes.append(
+            f"**Network ended:** {sim.end_reason} *Try:* address the cause (low **trust/confidence**, "
+            "no active users/producers, unsustainable rewards vs costs, or sustained low health). "
+            "Use the event log and indicators around the failure tick."
+        )
 
     if never_halves and cfg.monetary.initial_block_reward > 0:
-        notes.append(
-            "**No halving (reward never declines):** ongoing issuance can stay high, which may drive "
-            "inflation and economic stress. That hurts perceived value and **trust**, and can lower "
-            "cryptocurrency network health if supply grows faster than sustainable demand."
+        hint = (
+            " *Try:* set a **halving interval** (reduce reward over time), lower the **initial block reward**, "
+            "or add a **max supply**/burn policy that fits your design."
         )
-    if getattr(m, "economic_stress", 0.0) > 0.15:
         notes.append(
-            f"**Economic stress is active ({m.economic_stress:.0%}):** extreme inflation and/or volatility "
-            "is penalizing network health in this model. Bad monetary choices can reduce **trust** and "
-            "make participation less stable over time."
+            "**No halving (reward never declines):** ongoing issuance can stay high, driving inflation and "
+            "economic stress. That can erode perceived value and **trust** and lower cryptocurrency network "
+            "health." + hint
         )
-    if m.concentration > 0.25:
+    if stress > 0.15:
+        fix = (
+            " *Try:* lower **initial block reward** or issuance pace, enable/shorten **halving**, avoid "
+            "extreme fee/throughput settings that destabilize behavior, and check **volatility** sources "
+            "(events, liquidity/market settings)."
+        )
         notes.append(
-            f"**High concentration ({m.concentration:.0%} Herfindahl):** block production is dominated by "
-            "fewer producers, which weakens decentralization and can reduce **security** (easier to "
-            "capture or disrupt)."
+            f"**Economic stress is active ({stress:.0%}):** extreme inflation and/or volatility is penalizing "
+            "network health in this model. This can reduce **trust** and make participation less stable." + fix
         )
+
+    # Producers / concentration (security & trust implications)
+    prod_role = "miners" if cfg.network.consensus == "pow" else "validators"
+    prod_count_cfg = cfg.agents.n_miners if cfg.network.consensus == "pow" else cfg.agents.n_validators
+    if m.concentration > 0.25 or (prod_count_cfg <= 1 and prod_count_cfg >= 0):
+        fix = (
+            f" *Try (Advanced):* increase **{prod_role}** count and/or spread capacity so no single producer "
+            "dominates. For PoS, ensure enough validators are configured and can stay active."
+        )
+        level = "critical" if m.concentration > 0.8 else "high"
+        notes.append(
+            f"**{level.capitalize()} concentration ({m.concentration:.0%} Herfindahl):** block production is "
+            "dominated by fewer producers, weakening decentralization and **security** (easier to capture or "
+            "disrupt). Fewer independent producers can also reduce **trust**." + fix
+        )
+
+    # Sustainability: producers may go offline if rewards don't cover costs
+    if cfg.network.consensus == "pow":
+        prod_cost = cfg.agents.miner_cost_per_tick
+        if cfg.monetary.initial_block_reward <= 0 and sim.tick == 0:
+            notes.append(
+                "**No block reward (PoW):** miners have no issuance income; they rely on fees (and your setup). "
+                "*Try:* set an **initial block reward** or ensure fees/usage can sustain miner costs."
+            )
+        elif prod_cost > 0 and cfg.monetary.initial_block_reward * cfg.blocks_per_tick < prod_cost * max(1, prod_count_cfg) * 0.25 and prod_count_cfg > 0:
+            notes.append(
+                "**Rewards may not sustain miner costs:** if block rewards/fees don't cover operating costs, "
+                "miners can go offline, hurting availability and **security**. *Try:* raise **block reward** "
+                "(or fees/demand), lower **miner cost/tick** (Advanced), or adjust block time/halving carefully."
+            )
+    else:
+        if cfg.agents.n_validators <= 0:
+            notes.append(
+                "**No validators configured (PoS):** the network cannot produce blocks securely. *Try:* add "
+                "**validators** (Advanced) and appropriate stake/target stake settings."
+            )
+
     if cfg.network.consensus == "pow" and cfg.network.block_time_s <= 5.0:
         notes.append(
             "**Very fast PoW block time:** hard to secure in practice and can create unrealistically high "
-            "block capacity, which may hide congestion/fee signals and make **reliability** look better "
-            "than the design deserves."
+            "block capacity, hiding congestion/fee signals and making **reliability** look better than the "
+            "design deserves. *Try:* use a slower block time (e.g., 60–600s for PoW-style lessons) or reduce "
+            "**tx per block** to keep capacity realistic."
         )
     cap_day = cfg.blocks_per_tick * cfg.network.tx_per_block
     if sim.tick > 0 and cap_day > 1_000_000 and m.congestion < 0.02 and m.reliability > 0.99:
         notes.append(
             "**Over-provisioned capacity:** daily transaction capacity is extremely high relative to current "
-            "use, so congestion/fees may not appear. **Reliability** can stay near 100% even if other economic "
-            "choices are poor—check inflation, volatility, and economic stress."
+            "use, so congestion/fees may not appear. **Reliability** can stay near 100% even if other choices "
+            "are poor. *Try:* lower **tx per block** or increase block time, or test with more demand; check "
+            "inflation/volatility and economic stress."
         )
+    if sim.tick > 0 and m.congestion > 0.85 and m.reliability < 0.9:
+        notes.append(
+            "**Chronic congestion/reliability issues:** users face delays or drops, reducing **trust** and "
+            "driving churn. *Try:* increase **tx per block**/capacity, raise **block time** effects via "
+            "throughput choices, or reduce demand pressure."
+        )
+
     if cfg.population > 3000:
         notes.append(
-            "**Very large genesis population:** unrealistic for a brand-new network. Large starting "
-            "populations can distort bootstrapping dynamics and make early **trust/adoption** signals harder "
-            "to interpret."
+            "**Very large genesis population:** unrealistic for a brand-new network and can distort "
+            "bootstrapping/**trust** dynamics. *Try:* 200–1,200 agents for clearer first-run behavior."
         )
     elif cfg.population > 1200:
         notes.append(
-            "**Large starting population:** may be high for a first-run/genesis scenario; consider smaller "
-            "populations to see clearer bootstrapping and **trust** dynamics."
+            "**Large starting population:** may be high for a genesis scenario. *Try:* 200–900 for clearer "
+            "**trust/adoption** dynamics."
         )
+
     if m.reliability < 0.8 and sim.tick > 0:
         notes.append(
-            "**Low reliability:** users experience dropped/failed transactions, which reduces **trust** and "
-            "can push confidence down, leading to churn."
+            "**Low reliability:** dropped/failed transactions reduce **trust** and confidence, leading to "
+            "churn. *Try:* reduce congestion (more capacity or less pressure) and keep fees usable."
         )
     if sim.tick > 0 and m.sentiment < 0.35:
         notes.append(
-            "**Low sentiment/trust:** negative mood (from shocks, poor performance, or stress) can reduce "
-            "demand and participation, reinforcing weakness."
+            "**Low sentiment/trust:** negative mood can reduce demand and participation. *Try:* improve "
+            "reliability, avoid sustained economic stress/shocks, and ensure the network remains usable."
         )
-    if not notes:
+    if sim.tick > 20 and m.participation < 0.5:
+        notes.append(
+            "**Low participation:** many agents are offline, which can hurt security, availability, and "
+            "**trust**. *Try:* make rewards/costs sustainable, improve reliability/fees, and reduce stressors."
+        )
+
+    # Positive reinforcement / "appropriate reward" in feedback
+    if not sim.ended and sim.tick >= 30 and m.health >= 60 and m.reliability >= 0.95 and stress < 0.15 and m.concentration < 0.25:
+        notes.append(
+            "**Healthy signals:** reliability, decentralization, and stress levels look reasonable so far. "
+            "Keep monitoring **trust (sentiment)**, participation, and security as events occur."
+        )
+    elif not notes:
         notes.append(
             "No major red flags detected from the current parameters and indicators. Use the breakdown and "
             "event log to see how **trust (sentiment/confidence)**, **security**, and **reliability** respond "
