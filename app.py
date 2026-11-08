@@ -76,53 +76,45 @@ def _welcome_screen() -> None:
     """Full-page guide shown on first visit."""
     st.html(theme.hero("FutureCoins", "Design the rules. Watch the consequences.", False, tick=0))
     st.markdown("")
+
     st.markdown("### Welcome to FutureCoins")
     st.markdown(
-        "FutureCoins is a sandbox: you design a cryptocurrency's rules, "
-        "launch a simulation, and watch what happens to its economy, its "
-        "network, and its people."
+        "A sandbox: design a cryptocurrency's rules, run a simulation, "
+        "and watch what happens to its economy and network."
     )
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("#### 🎮 How to play")
-        st.markdown(
-            "1. **Design** your currency in the sidebar (consensus, block time, "
-            "supply, fees, population).\n"
-            "2. Press **⚙️ Apply config** to load your settings.\n"
-            "3. Press **▶ Run** to start the clock. Each tick = 1 simulated day.\n"
-            "4. Watch the grid, the 12 indicator cards, and the charts.\n"
-            "5. Press **⏸ Pause** / **↺ Reset** as needed."
-        )
-        st.markdown("#### 🎯 Goal")
-        st.markdown(
-            "Keep your network alive and healthy. Discover Bitcoin 2009 in "
-            "Discovery Mode. Earn all 5 achievements to unlock every preset."
-        )
-    with col2:
-        st.markdown("#### 📊 The dashboard")
-        st.markdown(
-            "- **Active nodes** — who's online vs total population\n"
-            "- **Block interval** — how fast blocks arrive\n"
-            "- **Throughput** — transactions per second\n"
-            "- **Fees** — congestion pricing\n"
-            "- **Supply** — minted, circulating, burned\n"
-            "- **Price index** — simulated market price (model)\n"
-            "- **Sentiment** — public mood (model)\n"
-            "- **Network health** — weighted composite (model)"
-        )
-        st.markdown("#### 🔍 Discovery Mode")
-        st.markdown(
-            "Reconstruct Bitcoin 2009 from its behaviour. Adjust parameters, "
-            "watch your similarity score rise, and unlock hints. Reach 95% to "
-            "unlock the Bitcoin 2009 preset."
-        )
+    st.markdown("#### 🎮 How to play")
+    st.markdown(
+        "1. **Design** your currency in the sidebar.\n"
+        "2. Press **⚙️ Apply config**.\n"
+        "3. Press **▶ Run**. Each tick = 1 simulated day.\n"
+        "4. Watch the grid, cards, and charts.\n"
+        "5. **⏸ Pause** / **↺ Reset** as needed."
+    )
+
+    st.markdown("#### 🎯 Goal")
+    st.markdown(
+        "Keep your network alive and healthy. Discover Bitcoin 2009 in "
+        "Discovery Mode. Earn all 5 achievements to unlock every preset."
+    )
+
+    st.markdown("#### 📊 Dashboard")
+    st.markdown(
+        "12 cards: active nodes, block interval, throughput, fees, supply, "
+        "price, sentiment, health. The **Why** tab decomposes health into 5 "
+        "weighted components. Everything labelled *model* is a simulation output."
+    )
+
+    st.markdown("#### 🔍 Discovery Mode")
+    st.markdown(
+        "Reconstruct Bitcoin 2009 from its behaviour. Adjust parameters, "
+        "watch your similarity score rise. Reach 95% to unlock the preset."
+    )
 
     st.markdown("#### 📚 Glossary & resources")
     st.markdown(
-        "Hover any card or term for a definition. The **Glossary** tab has 51 "
-        "terms. The **Why** tab explains the formulas and feedback loops. "
-        "The **Resources** section links to real-world learning material."
+        "Hover any card for a definition. The **Glossary** tab has 51 terms. "
+        "The **Why** tab explains formulas and feedback loops."
     )
 
     st.markdown("")
