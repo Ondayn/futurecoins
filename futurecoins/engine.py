@@ -235,7 +235,7 @@ class Simulation:
 
         # 9. Agents react.
         self._update_producer_behaviour(production, availability)
-        self._update_user_behaviour(mempool)
+        self._update_user_behaviour(mempool, sentiment_pressure=mods.sentiment)
         self._update_follower_behaviour()
         self._update_developers()
         # Micro-churn: a small fraction of users toggle state each tick, so the
@@ -504,7 +504,9 @@ class Simulation:
                 f"Tick {self.tick} · {joined} producers came back online as rewards recovered."
             )
 
-    def _update_user_behaviour(self, mempool: MempoolOutcome) -> None:
+    def _update_user_behaviour(
+        self, mempool: MempoolOutcome, *, sentiment_pressure: float = 0.0
+    ) -> None:
         cfg = self.config
         base_fee = max(cfg.network.base_fee, 1e-9)
         fee_ratio = mempool.fee / base_fee
@@ -518,6 +520,11 @@ class Simulation:
                 # Confidence blends experienced reliability and sentiment (trust).
                 target = self.economy.sentiment * (0.5 + 0.5 * reliability)
                 agent.confidence += 0.10 * (target - agent.confidence) + self.rng.gauss(0.0, 0.02)
+                # Event pressure (negative media, crashes): direct hit to confidence.
+                if sentiment_pressure < 0:
+                    agent.confidence += sentiment_pressure * 0.45
+                elif sentiment_pressure > 0:
+                    agent.confidence += sentiment_pressure * 0.1
                 # Fees → churn: higher fees steadily erode confidence.
                 if fee_ratio > 1.0:
                     agent.confidence -= 0.012 * min(fee_ratio - 1.0, 5.0)

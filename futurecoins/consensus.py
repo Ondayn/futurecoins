@@ -144,25 +144,22 @@ def produce(
 def security_margin(config: SimConfig, agents: list[Agent], avail: float) -> float:
     """A 0..1 proxy for "how expensive would it be to capture this network?".
 
-    PoS: the more stake online, the more capital an attacker must acquire.
-    PoW: the more active producers, the more hardware an attacker must out-mine.
-
-    This is deliberately crude. It is a teaching proxy, not a security audit.
+    Deliberately crude (teaching proxy, not an audit). Penalises concentration
+    and low/fragile producer participation; avoids a hard saturation that makes
+    large equal-producer sets read as "perfect" regardless of conditions.
     """
-    if config.network.consensus == "pos":
-        # PoS security = availability, but penalised by concentration: a single
-        # staker with all the stake is not secure no matter how much is online.
-        _, total_stake = producer_capacity(agents)
-        if total_stake <= 0:
-            return 0.0
-        producers, _ = producer_capacity(agents)
-        # Herfindahl of capacity shares: 1.0 = one producer owns everything.
-        concentration = sum((a.capacity / total_stake) ** 2 for a in producers)
-        return avail * (1.0 - concentration)
-
     producers, total_cap = producer_capacity(agents)
-    if total_cap <= 0:
+    if not producers or total_cap <= 0:
         return 0.0
-    # PoW security = producer count, penalised by concentration.
+
     concentration = sum((a.capacity / total_cap) ** 2 for a in producers)
-    return min(1.0, len(producers) / 50.0) * (1.0 - concentration)
+    decentral = max(0.0, 1.0 - concentration)
+    n = len(producers)
+    # Smooth participation factor (no hard cap at 50 producers).
+    producer_factor = n / (n + 8.0)
+
+    if config.network.consensus == "pos":
+        return max(0.0, min(1.0, avail * decentral * producer_factor))
+
+    # PoW: availability matters (a stalled chain isn't secure in practice).
+    return max(0.0, min(1.0, avail * decentral * producer_factor))

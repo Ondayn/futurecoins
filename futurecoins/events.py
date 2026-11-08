@@ -247,7 +247,8 @@ class EventEngine:
         """Severity depends on the player's configuration, not only on the dice.
 
         A healthy, decentralized network absorbs a shock. A concentrated,
-        barely-alive network amplifies it. That is the mechanic.
+        barely-alive network amplifies it. Narrative/social shocks are damped
+        less by technical health (confidence can fall even when blocks run).
         """
         if spec.id == "validator_exodus":
             participation = metrics.get("participation", 1.0)
@@ -255,6 +256,10 @@ class EventEngine:
 
         health = metrics.get("health", 50.0)
         resilience = 0.5 * (health / 100.0)
+        if spec.category == "social":
+            resilience *= 0.35
+        elif spec.id == "market_crash":
+            resilience *= 0.6
         concentration_penalty = 1.0 - self.config.social.decentralization
         return clamp(
             spec.base_severity * (1.0 + 0.5 * concentration_penalty) * (1.0 - resilience),
@@ -307,7 +312,7 @@ class EventEngine:
         if spec.id == "negative_media":
             return (
                 f"Negative media coverage: public confidence fell to {sentiment:.0f}/100. "
-                "Some users are going inactive until the story changes."
+                "Confidence is under pressure; some users may go inactive while the story lasts."
             )
         if spec.id == "validator_exodus":
             producers = [a for a in active_agents(agents) if a.is_producer]
