@@ -90,6 +90,7 @@ class Simulation:
 
         # Developers improve this over time. 1.0 = baseline capacity.
         self.capacity_multiplier = 1.0
+        self._dev_milestone = 1.0
 
         self.history: list[Metrics] = []
         self.recent_changes: deque[str] = deque(maxlen=40)
@@ -241,6 +242,9 @@ class Simulation:
         # grid visibly changes even in a steady-state network. Deterministic,
         # because it draws from the seeded rng.
         self._apply_micro_churn()
+        # Adoption-driven onboarding: a healthy, growing network attracts new
+        # users. Only when adoption is high and there's room in the population.
+        self._apply_onboarding()
 
         # 10. Economy reacts to this tick's activity.
         participation = self._participation()
@@ -503,20 +507,23 @@ class Simulation:
     def _update_user_behaviour(self, mempool: MempoolOutcome) -> None:
         cfg = self.config
         base_fee = max(cfg.network.base_fee, 1e-9)
-        expensive = mempool.fee > 3.0 * base_fee
-        unreliable = mempool.reliability < 0.80
+        fee_ratio = mempool.fee / base_fee
+        reliability = mempool.reliability
 
         for agent in self.agents:
             if agent.role is not Role.USER:
                 continue
 
             if agent.active:
-                target = self.economy.sentiment
+                # Confidence blends experienced reliability and sentiment (trust).
+                target = self.economy.sentiment * (0.5 + 0.5 * reliability)
                 agent.confidence += 0.10 * (target - agent.confidence) + self.rng.gauss(0.0, 0.02)
-                if expensive:
-                    agent.confidence -= 0.03
-                if unreliable:
-                    agent.confidence -= 0.03
+                # Fees → churn: higher fees steadily erode confidence.
+                if fee_ratio > 1.0:
+                    agent.confidence -= 0.012 * min(fee_ratio - 1.0, 5.0)
+                # Reliability → churn: dropped/failed experience pushes users away.
+                if reliability < 0.80:
+                    agent.confidence -= 0.04 * (0.80 - reliability) / 0.80
                 agent.confidence = clamp(agent.confidence, 0.0, 1.0)
 
                 if agent.confidence < cfg.agents.churn_confidence_threshold:
@@ -528,7 +535,8 @@ class Simulation:
                     agent.active = False
                     agent.streak_bad = 0
             else:
-                if self.economy.sentiment > 0.60:
+                # Users return only when the network is alive, affordable, and usable.
+                if self.economy.sentiment > 0.60 and reliability > 0.70 and fee_ratio < 4.0:
                     agent.streak_good += 1
                 else:
                     agent.streak_good = 0
@@ -593,31 +601,72 @@ class Simulation:
             return
         growth = self.config.agents.dev_improvement_rate * (devs / 100.0)
         self.capacity_multiplier = min(3.0, self.capacity_multiplier * (1.0 + growth))
+        # Emit a notable change at capacity milestones so the coupling is visible.
+        if self.capacity_multiplier >= self._dev_milestone + 0.25 and self._dev_milestone < 3.0:
+            self._dev_milestone = min(3.0, round(self.capacity_multiplier * 4) / 4)
+            self.recent_changes.append(
+                f"Tick {self.tick} · developer upgrades raised network capacity to "
+                f"{self.capacity_multiplier:.2f}× baseline."
+            )
 
     def _apply_micro_churn(self) -> None:
-        """A tiny fraction of users toggle state each tick.
+        """A tiny fraction of active users go briefly offline each tick.
 
-        Real networks have nodes that come and go for reasons beyond
-        profitability (maintenance, connectivity, attention). Without this the
-        grid looks frozen even when the simulation is running. The toggle is
-        deterministic because it draws from the seeded rng, and it respects
-        cooldowns so it never fights the hysteresis rules. It never resurrects
-        a dead network.
+        Real networks have nodes that come and go (maintenance, connectivity,
+        attention). Without this the grid can look frozen in steady state. The
+        choice is deterministic (seeded rng). It never resurrects inactive users
+        and never acts on a dead network.
         """
         if self.is_dead:
             return
-        users = [a for a in self.agents if a.role is Role.USER]
-        if not users:
+        active = [a for a in self.agents if a.role is Role.USER and a.active]
+        if not active:
             return
-        # ~1.5 % of users may toggle, at most 3 per tick.
-        candidates = self.rng.sample(users, min(len(users), max(1, len(users) // 60)))
+        # ~1.5 % of active users may step away, at most 2 per tick.
+        k = min(len(active), max(1, len(active) // 66), 2)
+        candidates = self.rng.sample(active, k)
         for agent in candidates:
-            if agent.cooldown > 0:
+            if agent.streak_bad > 0 or agent.streak_good > 0:
                 continue
-            agent.active = not agent.active
+            agent.active = False
             agent.streak_bad = 0
             agent.streak_good = 0
-            agent.cooldown = 1
+
+    def _apply_onboarding(self) -> None:
+        '''A healthy network attracts new users.
+
+        When adoption is high, a small number of new users join each tick.
+        They are placed at random grid positions. This makes the population
+        grow over time, which is visible on the dashboard and the grid.
+        '''
+        if self.is_dead:
+            return
+        adoption = self.economy.adoption
+        if adoption < 1.2:
+            return
+        # At most 1 new user per tick, with probability proportional to
+        # how far above 1.2 adoption is.
+        chance = min(0.3, (adoption - 1.2) * 0.5)
+        if self.rng.random() > chance:
+            return
+        # Create a new user agent.
+        from .agents import Agent, Role
+        new_id = len(self.agents)
+        row = self.rng.randrange(self.config.rows)
+        col = self.rng.randrange(self.config.cols)
+        agent = Agent(
+            id=new_id,
+            role=Role.USER,
+            row=row,
+            col=col,
+            active=True,
+            confidence=0.5,
+            balance=0.0,
+            capacity=1.0,
+            cost_per_tick=self.config.agents.user_tx_per_tick * 0.0,  # users don't have operating costs
+        )
+        self.agents.append(agent)
+        self._by_id[agent.id] = agent
 
     # ------------------------------------------------------------------
     # Metrics

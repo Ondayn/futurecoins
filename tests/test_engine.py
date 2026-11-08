@@ -25,12 +25,16 @@ def test_supply_is_conserved_across_balances_treasury_and_burns() -> None:
     )
 
 
-def test_population_is_never_created_or_destroyed() -> None:
+def test_population_never_loses_original_agents() -> None:
+    """Agents are never deleted; onboarding may add new users over time."""
     sim = Simulation(BITCOIN_2009)
     before = len(sim.agents)
+    original_ids = [agent.id for agent in sim.agents]
     sim.run(100)
-    assert len(sim.agents) == before
-    assert [agent.id for agent in sim.agents] == list(range(before))
+    assert len(sim.agents) >= before
+    # Original agents still exist with the same ids in the same order prefix.
+    assert [agent.id for agent in sim.agents[:before]] == original_ids
+    assert all(agent.id == i for i, agent in enumerate(sim.agents))
 
 
 def test_same_seed_reproduces_the_exact_history() -> None:
@@ -165,3 +169,62 @@ def test_followers_leave_a_collapsing_market() -> None:
     offline = {agent.role for agent in sim.agents if not agent.active}
     assert Role.TRADER in offline
     assert Role.DEVELOPER in offline
+
+
+def test_currency_fails_when_no_users_left_after_grace_period() -> None:
+    from dataclasses import replace
+
+    from futurecoins.config import EventParams
+
+    config = replace(BITCOIN_2009, events=EventParams(enabled=False))
+    sim = Simulation(config)
+    sim.tick = 6  # run_tick increments first; check is tick > 5
+    sim.economy.sentiment = 0.0
+    sim.economy.adoption = 0.5
+    for agent in sim.agents:
+        if agent.role is Role.USER:
+            agent.active = False
+            agent.confidence = 0.0
+            agent.streak_good = 0
+            agent.streak_bad = 99
+
+    sim.run_tick()
+
+    assert sim.ended
+    assert "no users" in sim.end_reason.lower()
+
+
+def test_currency_fails_on_sustained_low_health(monkeypatch) -> None:
+    import futurecoins.engine as engine_mod
+
+    sim = Simulation(BITCOIN_2009)
+    monkeypatch.setattr(engine_mod, "network_health", lambda **_: 5.0)
+    # Avoid immediate "everyone dead" / no-users side effects dominating the path.
+    sim.economy.sentiment = 0.4
+    for _ in range(5):
+        if sim.ended:
+            break
+        sim.run_tick()
+
+    assert sim.ended
+    assert "health stayed below 15" in sim.end_reason.lower()
+
+
+def test_onboarding_adds_users_when_adoption_is_high() -> None:
+    import random as _random
+
+    sim = Simulation(BITCOIN_2009)
+    sim.economy.adoption = 2.5
+    before = len(sim.agents)
+
+    # Try a few RNG seeds so the probabilistic gate passes deterministically.
+    added = False
+    for seed in range(50):
+        sim.rng = _random.Random(seed)
+        sim._apply_onboarding()
+        if len(sim.agents) > before:
+            added = True
+            break
+
+    assert added
+    assert any(a.role is Role.USER and a.id >= before for a in sim.agents)

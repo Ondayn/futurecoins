@@ -177,10 +177,12 @@ class EventParams:
 
     enabled: bool = True
     probability_scale: float = 1.0
-    crash_probability: float = 0.006
-    congestion_probability: float = 0.010
-    media_probability: float = 0.008
-    exodus_probability: float = 0.004
+    # Per-tick (1 tick = 1 simulated day). Tuned for a few notable events per
+    # simulated year in typical conditions, not constant crisis.
+    crash_probability: float = 0.012
+    congestion_probability: float = 0.020
+    media_probability: float = 0.016
+    exodus_probability: float = 0.008
 
 
 # ---------------------------------------------------------------------------

@@ -171,3 +171,28 @@ def test_predicate_false_never_awards(tmp_path) -> None:
     assert manager.evaluate(_summary(tick=0, metrics=_metrics(active=0))) == []
     assert manager.awarded_ids == set()
     assert not (tmp_path / "a.json").exists()
+
+
+def test_import_awards_merges_new_ones(tmp_path) -> None:
+    path = tmp_path / "a.json"
+    manager = AchievementManager(path=path)
+    payload = [
+        {
+            "id": "first_currency",
+            "name": "First Currency",
+            "description": "x",
+            "icon": "🪙",
+            "awarded_at": "2026-01-01T00:00:00+00:00",
+            "config_hash": "abc",
+            "seed": 1,
+            "tick": 1,
+            "metrics": {},
+            "snapshot": "",
+            "rows": 30,
+            "cols": 30,
+        }
+    ]
+    added = manager.import_awards(payload)
+    assert added == 1
+    assert manager.has("first_currency")
+    assert manager.import_awards(payload) == 0

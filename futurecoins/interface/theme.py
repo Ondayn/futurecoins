@@ -337,6 +337,39 @@ h1, h2, h3 { letter-spacing: -0.02em; }
   font-size: 0.8rem;
   margin: 0.3rem 0 0.5rem 0;
 }
+.fc-guide {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.2rem 0 0.6rem 0;
+}
+.fc-guide-card {
+  background: linear-gradient(180deg, rgba(17, 28, 51, 0.95), rgba(12, 19, 35, 0.95));
+  border: 1px solid var(--fc-border);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+}
+.fc-guide-card h4 {
+  margin: 0 0 0.25rem 0;
+  font-size: 0.88rem;
+  color: var(--fc-text);
+  letter-spacing: -0.01em;
+}
+.fc-guide-card p, .fc-guide-card li {
+  margin: 0.12rem 0;
+  color: var(--fc-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+.fc-guide-card ol, .fc-guide-card ul {
+  margin: 0.15rem 0 0 1.1rem;
+  padding: 0;
+}
+.fc-guide-card strong { color: var(--fc-text); font-weight: 600; }
+.fc-guide-card code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.74rem;
+  color: var(--fc-accent);
+}
 .fc-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.74rem; color: var(--fc-muted); }
 .fc-score { font-size: 1.9rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .fc-hint { color: var(--fc-text); background: rgba(251, 191, 36, 0.08); border: 1px solid rgba(251, 191, 36, 0.25); border-radius: 10px; padding: 0.4rem 0.6rem; margin: 0.25rem 0; font-size: 0.8rem; }

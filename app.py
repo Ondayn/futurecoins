@@ -72,54 +72,64 @@ def _initialise() -> None:
 _initialise()
 
 
+def _guide_html(*, compact: bool = False) -> str:
+    """Styled guide content (shared by welcome screen and Guide tab)."""
+    intro = (
+        '<div class="fc-guide-card"><p>A sandbox: design a cryptocurrency\'s rules, '
+        "run a simulation, and watch what happens to its economy and network. "
+        "Everything labelled <em>model</em> is a simulation output, not real market data.</p></div>"
+    )
+    how = (
+        '<div class="fc-guide-card"><h4>🎮 How to play</h4><ol>'
+        "<li><strong>Design</strong> your currency in the sidebar (consensus, block time, supply, fees, population).</li>"
+        "<li>Press <strong>⚙️ Apply config</strong> to load your settings.</li>"
+        "<li>Press <strong>▶ Run</strong>. Each tick = <strong>1 simulated day</strong> (365 ticks = 1 year).</li>"
+        "<li>Watch the grid, the 12 indicator cards, and the charts.</li>"
+        "<li><strong>⏸ Pause</strong> / <strong>↺ Reset</strong> as needed.</li>"
+        "</ol></div>"
+    )
+    goal = (
+        '<div class="fc-guide-card"><h4>🎯 Goal</h4>'
+        "<p>Keep your network alive and healthy. Discover Bitcoin 2009 in "
+        "Discovery Mode. Earn achievements to unlock presets.</p></div>"
+    )
+    dashboard = (
+        '<div class="fc-guide-card"><h4>📊 Dashboard</h4>'
+        "<p>12 cards: active nodes, block interval, throughput, fees, supply, "
+        "price index, sentiment, and network health. The <strong>Why</strong> tab "
+        "explains changes and feedback loops. The <strong>Dashboard</strong> tab shows "
+        "health components and history after you run.</p></div>"
+    )
+    discovery = (
+        '<div class="fc-guide-card"><h4>🔍 Discovery Mode</h4>'
+        "<p>Reconstruct Bitcoin 2009 from its behaviour. Adjust parameters, run the simulation, "
+        "and use the feedback to improve your match. Reach 95% similarity to unlock the preset.</p></div>"
+    )
+    tips = (
+        '<div class="fc-guide-card"><h4>💡 Tips</h4><ul>'
+        "<li>Speed changes ticks per frame (1/2/5/20); the frame rate stays at 1 fps.</li>"
+        "<li>Grey/blank cells: offline agents disappear; faint dots are unassigned slots.</li>"
+        "<li>If health drops below 15 for 5 ticks, or all users leave, the currency can <strong>fail</strong> and the simulation ends.</li>"
+        "<li>If every agent goes offline, the network is <strong>dead</strong> — press Reset.</li>"
+        "</ul></div>"
+    )
+    glossary = (
+        '<div class="fc-guide-card"><h4>📚 Glossary & resources</h4>'
+        "<p>Hover any card for a definition. The <strong>Glossary</strong> tab has 51 terms, "
+        "and the <strong>Why</strong> tab explains formulas and feedback loops.</p></div>"
+    )
+    cards = [intro, how, goal, dashboard, discovery]
+    if not compact:
+        cards.extend([tips, glossary])
+    return '<div class="fc-guide">' + "".join(cards) + "</div>"
+
+
 def _welcome_screen() -> None:
     """Full-page guide shown on first visit."""
     st.html(theme.hero("FutureCoins", "Design the rules. Watch the consequences.", False, tick=0))
-    st.markdown("")
-
-    st.markdown("### Welcome to FutureCoins")
-    st.markdown(
-        "A sandbox: design a cryptocurrency's rules, run a simulation, "
-        "and watch what happens to its economy and network."
-    )
     st.html('<div class="fc-note">Hover any card or term for a definition. '
-            'The Glossary tab has 51 terms.</div>')
-
-    st.markdown("#### 🎮 How to play")
-    st.markdown(
-        "1. **Design** your currency in the sidebar.\n"
-        "2. Press **⚙️ Apply config**.\n"
-        "3. Press **▶ Run**. Each tick = 1 simulated day.\n"
-        "4. Watch the grid, cards, and charts.\n"
-        "5. **⏸ Pause** / **↺ Reset** as needed."
-    )
-
-    st.markdown("#### 🎯 Goal")
-    st.markdown(
-        "Keep your network alive and healthy. Discover Bitcoin 2009 in "
-        "Discovery Mode. Earn all 5 achievements to unlock every preset."
-    )
-
-    st.markdown("#### 📊 Dashboard")
-    st.markdown(
-        "12 cards: active nodes, block interval, throughput, fees, supply, "
-        "price, sentiment, health. The **Why** tab decomposes health into 5 "
-        "weighted components. Everything labelled *model* is a simulation output."
-    )
-
-    st.markdown("#### 🔍 Discovery Mode")
-    st.markdown(
-        "Reconstruct Bitcoin 2009 from its behaviour. Adjust parameters, "
-        "watch your similarity score rise. Reach 95% to unlock the preset."
-    )
-
-    st.markdown("#### 📚 Glossary & resources")
-    st.markdown(
-        "Hover any card for a definition. The **Glossary** tab has 51 terms. "
-        "The **Why** tab explains formulas and feedback loops."
-    )
-
-    st.markdown("")
+            'The Glossary tab has 51 terms. This is an educational model, not financial advice.</div>')
+    st.html(_guide_html(compact=False))
     if st.button("🚀 Start playing", type="primary", width="stretch"):
         st.session_state.seen_guide = True
         st.rerun()
@@ -366,85 +376,50 @@ def live_view() -> None:
 
     # -- Guide -------------------------------------------------------------
     with tabs[0]:
-        st.markdown("### How to play FutureCoins")
-        st.markdown(
-            "FutureCoins is a sandbox: you design a cryptocurrency's rules, "
-            "launch a simulation, and watch what happens to its economy, its "
-            "network, and its people."
-        )
-
-        st.markdown("#### 1. Design your currency")
-        st.markdown(
-            "Use the **Currency designer** sidebar to set consensus (Proof of Work "
-            "or Proof of Stake), block time, supply cap, fees, population, and more. "
-            "Pick a **Preset** to start from a known design, or use **Blank Canvas** "
-            "to build from scratch. Press **⚙️ Apply config** to load your settings."
-        )
-
-        st.markdown("#### 2. Run the simulation")
-        st.markdown(
-            "Press **▶ Run** to start the clock. Each tick is **one simulated day**. "
-            "The grid shows your network: each cell is an agent (or a cohort of "
-            "agents). Miners ⛏️, validators ✅, users 👤, traders 📈, developers 💻, "
-            "and attackers 🏴. Grey/blank cells are offline agents. Press **⏸ Pause** "
-            "to stop, **↺ Reset** to start over."
-        )
-
-        st.markdown("#### 3. Read the dashboard")
-        st.markdown(
-            "The **12 indicator cards** show active nodes, block interval, "
-            "throughput, fees, supply, price index, sentiment, and network health. "
-            "The **Dashboard** tab breaks down health into its 5 components with "
-            "visible weights. The chart shows price, health, and sentiment over "
-            "time. Everything labelled *model* is a simulation output, not real "
-            "market data."
-        )
-
-        st.markdown("#### 4. Play Discovery Mode")
-        st.markdown(
-            "The **Discovery** tab challenges you to reconstruct Bitcoin 2009 "
-            "from its behaviour. Adjust parameters and watch your **similarity "
-            "score** rise. Hints unlock as you get closer. Reaching 95% similarity "
-            "unlocks the Bitcoin 2009 preset."
-        )
-
-        st.markdown("#### 5. Earn achievements")
-        st.markdown(
-            "The **Awards** tab tracks 5 achievements. Each one you earn unlocks "
-            "a preset (shown as 🔒 Mystery Currency until unlocked). Export your "
-            "achievements to carry them to another machine."
-        )
-
-        st.markdown("#### 6. Tips")
-        st.markdown(
-            "- **Speed** changes how many ticks per frame (1/2/5/20). The frame "
-            "rate stays at 1 fps.\n"
-            "- **ASCII fallback** uses letters if emoji render oddly.\n"
-            "- If **network health** drops below 15 for 5 ticks, or all users "
-            "leave, the currency **fails** and the simulation ends.\n"
-            "- If every agent goes offline, the network is **dead** — press "
-            "Reset to revive it.\n"
-            "- Hover any card or term for a definition. The **Glossary** tab has "
-            "51 terms."
-        )
-
-        st.caption(
-            "1 tick = 1 simulated day · 365 ticks = 1 simulated year · "
-            "This is an educational model, not financial advice."
-        )
+        st.html('<div class="fc-guide-card"><h4>How to play FutureCoins</h4>'
+                '<p>Design a cryptocurrency\'s rules, run the simulation, and watch what happens '
+                'to its economy and network. Use the sidebar to configure, then Apply and Run.</p></div>')
+        st.html(_guide_html(compact=False))
+        st.html('<div class="fc-guide-card"><h4>🏆 Achievements</h4>'
+                '<p>The <strong>Awards</strong> tab tracks achievements. Earning them can unlock presets '
+                '(shown as 🔒 Mystery Currency until unlocked). Export/import JSON to carry progress between machines.</p></div>')
+        st.html('<div class="fc-note">1 tick = 1 simulated day · 365 ticks = 1 simulated year · '
+                'Educational model, not financial advice.</div>')
 
     # -- Dashboard ---------------------------------------------------------
     with tabs[1]:
         metrics = sim.metrics
         st.markdown("#### Network health breakdown")
-        st.caption(
-            "The score is a weighted average. Every weight is visible, so you can disagree "
-            "with the formula instead of guessing what it means."
-        )
-        dashboard.render_health(metrics)
+        if sim.tick == 0:
+            st.html('<div class="fc-note">Run the simulation to see the health breakdown. '
+                    'Components (participation, decentralization, reliability, security, sentiment) '
+                    'are weighted into a single score once the network has activity.</div>')
+        else:
+            st.caption(
+                "The score is a weighted average. Every weight is visible, so you can disagree "
+                "with the formula instead of guessing what it means."
+            )
+            dashboard.render_health(metrics)
 
         history = sim.history[-400:]
         if len(history) > 1:
+            prev, curr = history[-2], history[-1]
+            deltas = [
+                ("Health", curr.health - prev.health, "{:+.1f}"),
+                ("Price index", curr.price - prev.price, "{:+.2f}"),
+                ("Sentiment", (curr.sentiment - prev.sentiment) * 100, "{:+.1f} pts"),
+                ("Active nodes", curr.active_nodes - prev.active_nodes, "{:+,.0f}"),
+                ("Avg fee", curr.avg_fee - prev.avg_fee, "{:+.4f}"),
+                ("Reliability", (curr.reliability - prev.reliability) * 100, "{:+.1f} pts"),
+            ]
+            moved = [(name, val, fmt) for name, val, fmt in deltas if abs(val) > 1e-9]
+            if moved:
+                parts = []
+                for name, val, fmt in moved[:4]:
+                    arrow = "↑" if val > 0 else "↓"
+                    parts.append(f"{arrow} <strong>{html.escape(name)}</strong> {fmt.format(val)}")
+                st.html('<div class="fc-note"><strong>Last tick:</strong> ' + " · ".join(parts) +
+                        '. See the <strong>Why</strong> tab for causes and events.</div>')
             st.markdown("#### Recent history")
             st.line_chart(
                 {
@@ -465,62 +440,68 @@ def live_view() -> None:
 
     # -- Discovery ---------------------------------------------------------
     with tabs[2]:
-        breakdown = score_config(sim.config, BITCOIN_2009)
         st.markdown(f"### {BITCOIN_2009.name} — {BITCOIN_2009.era}")
         st.markdown(f"> *{BITCOIN_2009.riddle}*")
-        st.markdown("")  # vertical breathing room
+        st.markdown("")
 
-        st.metric("Similarity", f"{breakdown.total:.1%}")
-        st.progress(min(max(breakdown.total, 0.0), 1.0))
-
-        st.markdown(f"**{breakdown.message}**")
-        misses = near_misses(breakdown)
-        if misses:
-            st.caption("Close but not exact: " + ", ".join(misses))
-        st.markdown("")  # vertical breathing room
-        st.caption(BITCOIN_2009.caveat)
-
-        st.markdown("#### How the score is built")
-        st.caption(
-            "Weights are visible on purpose. A score you cannot inspect is a guessing game. "
-            "Parameters historians are less sure about count for less."
-        )
-        rows = [
-            {
-                "Parameter": param.label,
-                "Your value": _param_value(param.key, param.value),
-                "Similarity": f"{param.similarity:.0%}",
-                "Weight": f"{param.effective_weight:.0%}",
-                "Confidence": param.confidence,
-            }
-            for param in breakdown.params
-        ]
-        st.dataframe(rows, width="stretch", hide_index=True)
-
-        st.markdown("#### Hints")
-        hints = build_hints(breakdown, limit=3)
-        shown = min(st.session_state.hints_shown, len(hints))
-        if not hints:
-            st.success("Every parameter matches. You have reconstructed this currency.")
-        for hint in hints[:shown]:
-            st.html(f'<div class="fc-hint">💡 {html.escape(hint)}</div>')
-        if shown < len(hints) and st.button("Reveal another hint", key="more_hints"):
-            st.session_state.hints_shown = shown + 1
-            st.rerun()
-
-        if breakdown.total >= 0.95:
-            tooltips.note(
-                "Discovery achieved. Notice what you did <em>not</em> need: a supply-cap "
-                "parameter. Bitcoin's 21 million limit is the sum of the halving series "
-                "210,000 × 50 × 2, not a constant in the rules."
-            )
+        if sim.tick == 0:
+            st.html('<div class="fc-note">Set up your currency, press <strong>⚙️ Apply config</strong>, '
+                    'then press <strong>▶ Run</strong>. Similarity feedback appears after the simulation starts, '
+                    'so you discover the match by observing behaviour — not from a pre-run percentage clue.</div>')
+            st.caption(BITCOIN_2009.caveat)
         else:
-            with st.expander("The teaching moment (spoiler-light)"):
-                st.write(
-                    "Bitcoin's 21 million cap is not written as a constant. It is the sum of "
-                    "the halving series. If you are stuck on the cap, try asking what the "
-                    "halving interval does to the total over a very long time."
+            breakdown = score_config(sim.config, BITCOIN_2009)
+            st.metric("Similarity", f"{breakdown.total:.1%}")
+            st.progress(min(max(breakdown.total, 0.0), 1.0))
+
+            st.markdown(f"**{breakdown.message}**")
+            misses = near_misses(breakdown)
+            if misses:
+                st.caption("Close but not exact: " + ", ".join(misses))
+            st.markdown("")
+            st.caption(BITCOIN_2009.caveat)
+
+            st.markdown("#### How the score is built")
+            st.caption(
+                "Weights are visible on purpose. A score you cannot inspect is a guessing game. "
+                "Parameters historians are less sure about count for less."
+            )
+            rows = [
+                {
+                    "Parameter": param.label,
+                    "Your value": _param_value(param.key, param.value),
+                    "Similarity": f"{param.similarity:.0%}",
+                    "Weight": f"{param.effective_weight:.0%}",
+                    "Confidence": param.confidence,
+                }
+                for param in breakdown.params
+            ]
+            st.dataframe(rows, width="stretch", hide_index=True)
+
+            st.markdown("#### Hints")
+            hints = build_hints(breakdown, limit=3)
+            shown = min(st.session_state.hints_shown, len(hints))
+            if not hints:
+                st.success("Every parameter matches. You have reconstructed this currency.")
+            for hint in hints[:shown]:
+                st.html(f'<div class="fc-hint">💡 {html.escape(hint)}</div>')
+            if shown < len(hints) and st.button("Reveal another hint", key="more_hints"):
+                st.session_state.hints_shown = shown + 1
+                st.rerun()
+
+            if breakdown.total >= 0.95:
+                tooltips.note(
+                    "Discovery achieved. Notice what you did <em>not</em> need: a supply-cap "
+                    "parameter. Bitcoin's 21 million limit is the sum of the halving series "
+                    "210,000 × 50 × 2, not a constant in the rules."
                 )
+            else:
+                with st.expander("The teaching moment (spoiler-light)"):
+                    st.write(
+                        "Bitcoin's 21 million cap is not written as a constant. It is the sum of "
+                        "the halving series. If you are stuck on the cap, try asking what the "
+                        "halving interval does to the total over a very long time."
+                    )
 
     # -- Achievements ------------------------------------------------------
     with tabs[3]:
@@ -615,9 +596,13 @@ def live_view() -> None:
                 if entry.link:
                     st.link_button(entry.link_label or "Learn more", entry.link)
 
+        st.markdown("")
+        st.html('<div style="height:0.5rem"></div>')
         st.divider()
+        st.markdown("")
         st.markdown("### Further reading")
         st.caption("Every link says what you will learn before you click it.")
+        st.markdown("")
         for resource in RESOURCES:
             st.markdown(
                 f"**[{resource.title}]({resource.url})** · *{resource.topic}*  \n"
@@ -663,23 +648,26 @@ def live_view() -> None:
         )
 
         st.markdown("#### Health, decomposed")
-        metrics = sim.metrics
-        rows = [
-            {
-                "Component": label,
-                "Value": f"{value:.0%}",
-                "Weight": f"{weight:.0%}",
-                "Contribution": f"{value * weight * 100:.1f} points",
-            }
-            for label, value, weight in health_breakdown(
-                metrics.participation,
-                metrics.concentration,
-                metrics.reliability,
-                metrics.security,
-                metrics.sentiment,
-            )
-        ]
-        st.dataframe(rows, width="stretch", hide_index=True)
+        if sim.tick == 0:
+            st.html('<div class="fc-note">Run the simulation to see how health components contribute.</div>')
+        else:
+            metrics = sim.metrics
+            rows = [
+                {
+                    "Component": label,
+                    "Value": f"{value:.0%}",
+                    "Weight": f"{weight:.0%}",
+                    "Contribution": f"{value * weight * 100:.1f} points",
+                }
+                for label, value, weight in health_breakdown(
+                    metrics.participation,
+                    metrics.concentration,
+                    metrics.reliability,
+                    metrics.security,
+                    metrics.sentiment,
+                )
+            ]
+            st.dataframe(rows, width="stretch", hide_index=True)
 
         if sim.event_history:
             st.markdown("#### Event history")
