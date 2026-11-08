@@ -27,26 +27,44 @@ def _magnitude(ratio: float) -> str:
     return "close"
 
 
+def _spec_hint(param: ParamScore, which: str) -> str | None:
+    """Get a target-aware hint from the scored param (preferred) or legacy table."""
+    if which == "low" and getattr(param, "hint_low", ""):
+        return param.hint_low
+    if which == "high" and getattr(param, "hint_high", ""):
+        return param.hint_high
+    return _SPEC_HINTS.get((param.key, which))
+
+
 def hint_for(param: ParamScore) -> str | None:
     """One sentence about a single parameter, or None if it is already right."""
     if param.similarity >= 0.98:
         return None
 
-    spec_hints = _SPEC_HINTS.get((param.key, "low")), _SPEC_HINTS.get((param.key, "high"))
-
     if param.target is None:
-        # "No cap" style parameters.
-        return spec_hints[1] or f"{param.label}: this network made a different choice."
+        # "No cap" / optional choice differs.
+        return (
+            _spec_hint(param, "high")
+            or _spec_hint(param, "low")
+            or f"{param.label}: this network made a different choice."
+        )
 
     if isinstance(param.target, str):
-        return spec_hints[1] or f"{param.label}: this network used something else."
+        return (
+            _spec_hint(param, "high")
+            or _spec_hint(param, "low")
+            or f"{param.label}: this network used something else."
+        )
 
     target = float(param.target)
     value = float(param.value or 0.0)
 
     if target == 0:
-        # Anything above zero is simply wrong; direction does not apply.
-        return spec_hints[1] or f"{param.label}: this network had none of it at launch."
+        return (
+            _spec_hint(param, "high")
+            or _spec_hint(param, "low")
+            or f"{param.label}: this network had none of it at launch."
+        )
 
     ratio = value / target if target else 0.0
     direction = _magnitude(ratio)
@@ -55,8 +73,8 @@ def hint_for(param: ParamScore) -> str | None:
         return f"{param.label}: close, but not exact."
 
     if direction in ("too low", "far too low"):
-        return spec_hints[0] or f"{param.label}: {direction}."
-    return spec_hints[1] or f"{param.label}: {direction}."
+        return _spec_hint(param, "low") or f"{param.label}: {direction}."
+    return _spec_hint(param, "high") or f"{param.label}: {direction}."
 
 
 def build_hints(breakdown: ScoreBreakdown, limit: int = 3) -> list[str]:

@@ -6,9 +6,23 @@ from dataclasses import replace
 
 import pytest
 
-from futurecoins.config import BITCOIN_2009, NEVER, PRESETS
-from futurecoins.discovery import BITCOIN_2009 as TARGET
-from futurecoins.discovery import build_hints, hint_for, near_misses, score_config
+from futurecoins.config import BITCOIN_2009, ETHEREUM_2015, NEVER, PRESETS, SOLANA_2020
+from futurecoins.discovery import (
+    BITCOIN_2009 as TARGET,
+)
+from futurecoins.discovery import (
+    ETHEREUM_2015 as ETH_TARGET,
+)
+from futurecoins.discovery import (
+    SOLANA_2020 as SOL_TARGET,
+)
+from futurecoins.discovery import (
+    TARGETS,
+    build_hints,
+    hint_for,
+    near_misses,
+    score_config,
+)
 from futurecoins.discovery.scoring import band_for, numeric_similarity
 from futurecoins.discovery.targets import ParamSpec
 
@@ -67,11 +81,46 @@ def test_only_the_bitcoin_preset_solves_discovery() -> None:
             assert breakdown.total < 0.95, name
 
 
+def test_new_discovery_targets_exist() -> None:
+    assert TARGETS["bitcoin_2009"].name == "Bitcoin"
+    assert TARGETS["ethereum_2015"].name == "Ethereum"
+    assert TARGETS["solana_2020"].name == "Solana"
+
+
+def test_ethereum_preset_scores_as_ethereum_discovery() -> None:
+    breakdown = score_config(ETHEREUM_2015, ETH_TARGET)
+    assert breakdown.total == pytest.approx(1.0)
+    assert breakdown.discovered
+    assert build_hints(breakdown) == []
+
+
+def test_solana_preset_scores_as_solana_discovery() -> None:
+    breakdown = score_config(SOLANA_2020, SOL_TARGET)
+    assert breakdown.total == pytest.approx(1.0)
+    assert breakdown.discovered
+    assert build_hints(breakdown) == []
+
+
+def test_only_matching_presets_solve_new_targets() -> None:
+    for name, config in PRESETS.items():
+        eth = score_config(config, ETH_TARGET).total
+        sol = score_config(config, SOL_TARGET).total
+        if name == "Ethereum 2015":
+            assert eth >= 0.95
+        else:
+            assert eth < 0.95, name
+        if name == "Solana 2020":
+            assert sol >= 0.95
+        else:
+            assert sol < 0.95, name
+
+
 def test_hints_never_contain_a_number() -> None:
     """Direction and magnitude only — never the target value."""
-    for name, config in PRESETS.items():
-        for hint in build_hints(score_config(config, TARGET)):
-            assert not any(char.isdigit() for char in hint), (name, hint)
+    for target in TARGETS.values():
+        for name, config in PRESETS.items():
+            for hint in build_hints(score_config(config, target)):
+                assert not any(char.isdigit() for char in hint), (target.id, name, hint)
 
 
 def test_hint_for_a_correct_parameter_is_none() -> None:

@@ -421,11 +421,13 @@ PRESETS: dict[str, SimConfig] = {
 # with None) is always available. Blank Canvas is the starter and is never
 # locked, so a new player always has somewhere to begin.
 # Presets not listed here are permanently locked (mystery) until a discovery
-# target is added for them. Blank Canvas and Chaos Sandbox are always open.
+# target/unlock path is added for them. Blank Canvas and Chaos Sandbox are always open.
 PRESET_UNLOCKS: dict[str, str | None] = {
     "Blank Canvas": None,
     "Chaos Sandbox": None,
     "Bitcoin 2009": "genesis_discovery",
+    "Ethereum 2015": "ethereum_discovery",
+    "Solana 2020": "solana_discovery",
 }
 
 # The library's default is the same object as the Blank Canvas preset, so

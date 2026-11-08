@@ -11,9 +11,11 @@ from futurecoins.achievements import (
     crisis_survivor,
     decode_snapshot,
     encode_snapshot,
+    ethereum_discovery,
     first_currency,
     genesis_discovery,
     network_architect,
+    solana_discovery,
     survivor,
 )
 from futurecoins.agents import make_population
@@ -68,6 +70,14 @@ def test_survivor_requires_a_full_simulated_year() -> None:
 def test_genesis_discovery_threshold() -> None:
     assert not genesis_discovery(_summary(discovery_score=0.94))
     assert genesis_discovery(_summary(discovery_score=0.95))
+    assert genesis_discovery(_summary(discovery_scores={"bitcoin_2009": 0.96}))
+
+
+def test_new_discovery_achievements_thresholds() -> None:
+    assert not ethereum_discovery(_summary(discovery_scores={"ethereum_2015": 0.94}))
+    assert ethereum_discovery(_summary(discovery_scores={"ethereum_2015": 0.95}))
+    assert not solana_discovery(_summary(discovery_scores={"solana_2020": 0.94}))
+    assert solana_discovery(_summary(discovery_scores={"solana_2020": 0.95}))
 
 
 def test_crisis_survivor_needs_a_severe_event_and_recovery() -> None:

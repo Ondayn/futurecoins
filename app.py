@@ -30,7 +30,7 @@ from futurecoins.achievements import (
     encode_snapshot,
 )
 from futurecoins.config import NEVER, PRESET_UNLOCKS, PRESETS
-from futurecoins.discovery import BITCOIN_2009, build_hints, near_misses, score_config
+from futurecoins.discovery import BITCOIN_2009, TARGETS, build_hints, near_misses, score_config
 from futurecoins.education import GLOSSARY, RESOURCES, categories, search
 from futurecoins.engine import Simulation
 from futurecoins.interface import controls, dashboard, grid_view, theme, tooltips
@@ -90,7 +90,7 @@ def _guide_html(*, compact: bool = False) -> str:
     )
     goal = (
         '<div class="fc-guide-card"><h4>🎯 Goal</h4>'
-        "<p>Keep your network alive and healthy. Discover Bitcoin 2009 in "
+        "<p>Keep your network alive and healthy. Reconstruct currencies in "
         "Discovery Mode. Earn achievements to unlock presets.</p></div>"
     )
     dashboard = (
@@ -102,8 +102,9 @@ def _guide_html(*, compact: bool = False) -> str:
     )
     discovery = (
         '<div class="fc-guide-card"><h4>🔍 Discovery Mode</h4>'
-        "<p>Reconstruct Bitcoin 2009 from its behaviour. Adjust parameters, run the simulation, "
-        "and use the feedback to improve your match. Reach 95% similarity to unlock the preset.</p></div>"
+        "<p>Reconstruct currencies from their behaviour (educational abstractions). "
+        "Choose a target, adjust parameters, run the simulation, and use the feedback to improve "
+        "your match. Reach 95% similarity to earn the discovery achievement and unlock its preset.</p></div>"
     )
     tips = (
         '<div class="fc-guide-card"><h4>💡 Tips</h4><ul>'
@@ -143,14 +144,19 @@ if not st.session_state.seen_guide:
 
 def _summary(sim: Simulation) -> RunSummary:
     """Build the only object achievements are allowed to inspect."""
-    breakdown = score_config(sim.config, BITCOIN_2009)
+    discovery_scores = {
+        target_id: score_config(sim.config, target).total
+        for target_id, target in TARGETS.items()
+    }
+    btc_score = discovery_scores.get(BITCOIN_2009.id)
     return RunSummary(
         tick=sim.tick,
         metrics=sim.metrics,
         config=sim.config,
         history=tuple(sim.history),
         events=tuple(sim.event_history),
-        discovery_score=breakdown.total,
+        discovery_score=btc_score,
+        discovery_scores=discovery_scores,
         snapshot=encode_snapshot(sim.agents, sim.config.rows, sim.config.cols),
     )
 
@@ -573,17 +579,41 @@ def live_view() -> None:
 
     # -- Discovery ---------------------------------------------------------
     with tabs[2]:
-        st.markdown(f"### {BITCOIN_2009.name} — {BITCOIN_2009.era}")
-        st.markdown(f"> *{BITCOIN_2009.riddle}*")
+        st.markdown("### Discovery Mode")
+        st.caption(
+            "Reconstruct currencies from their behaviour. Similarity feedback appears only after you run the "
+            "simulation (no pre-run percentage clue). Targets are educational abstractions with stated confidence."
+        )
+        target_options = {f"{t.name} — {t.era}": t for t in TARGETS.values()}
+        selected_target_label = st.selectbox(
+            "Target",
+            options=list(target_options.keys()),
+            key="discovery_target",
+            help="Choose which currency to reconstruct. Hints and scores apply to the selected target.",
+        )
+        target = target_options[selected_target_label]
+        if st.session_state.get("_discovery_target_prev") != target.id:
+            st.session_state.hints_shown = 1
+            st.session_state["_discovery_target_prev"] = target.id
+
+        st.markdown(f"#### {target.name} — {target.era}")
+        st.markdown(f"> *{target.riddle}*")
         st.markdown("")
+
+        # Map target -> preset/achievement for unlock messaging
+        target_unlocks = {
+            "bitcoin_2009": ("Bitcoin 2009", "genesis_discovery", "Genesis Discovery"),
+            "ethereum_2015": ("Ethereum 2015", "ethereum_discovery", "Frontier Discovery"),
+            "solana_2020": ("Solana 2020", "solana_discovery", "High-Throughput Discovery"),
+        }
 
         if sim.tick == 0:
             st.html('<div class="fc-note">Set up your currency, press <strong>⚙️ Apply config</strong>, '
                     'then press <strong>▶ Run</strong>. Similarity feedback appears after the simulation starts, '
                     'so you discover the match by observing behaviour — not from a pre-run percentage clue.</div>')
-            st.caption(BITCOIN_2009.caveat)
+            st.caption(target.caveat)
         else:
-            breakdown = score_config(sim.config, BITCOIN_2009)
+            breakdown = score_config(sim.config, target)
             st.metric("Similarity", f"{breakdown.total:.1%}")
             st.progress(min(max(breakdown.total, 0.0), 1.0))
 
@@ -592,12 +622,12 @@ def live_view() -> None:
             if misses:
                 st.caption("Close but not exact: " + ", ".join(misses))
             st.markdown("")
-            st.caption(BITCOIN_2009.caveat)
+            st.caption(target.caveat)
 
             st.markdown("#### How the score is built")
             st.caption(
                 "Weights are visible on purpose. A score you cannot inspect is a guessing game. "
-                "Parameters historians are less sure about count for less."
+                "Parameters historians are less sure about count for less. Targets are simplified abstractions."
             )
             rows = [
                 {
@@ -615,26 +645,47 @@ def live_view() -> None:
             hints = build_hints(breakdown, limit=3)
             shown = min(st.session_state.hints_shown, len(hints))
             if not hints:
-                st.success("Every parameter matches. You have reconstructed this currency.")
+                st.success("Every parameter matches this target's abstraction. You have reconstructed it.")
             for hint in hints[:shown]:
                 st.html(f'<div class="fc-hint">💡 {html.escape(hint)}</div>')
-            if shown < len(hints) and st.button("Reveal another hint", key="more_hints"):
+            if shown < len(hints) and st.button("Reveal another hint", key=f"more_hints_{target.id}"):
                 st.session_state.hints_shown = shown + 1
                 st.rerun()
 
+            unlock = target_unlocks.get(target.id)
             if breakdown.total >= 0.95:
-                tooltips.note(
-                    "Discovery achieved. Notice what you did <em>not</em> need: a supply-cap "
-                    "parameter. Bitcoin's 21 million limit is the sum of the halving series "
-                    "210,000 × 50 × 2, not a constant in the rules."
-                )
-            else:
-                with st.expander("The teaching moment (spoiler-light)"):
-                    st.write(
-                        "Bitcoin's 21 million cap is not written as a constant. It is the sum of "
-                        "the halving series. If you are stuck on the cap, try asking what the "
-                        "halving interval does to the total over a very long time."
+                if unlock:
+                    preset_name, achievement_id, achievement_name = unlock
+                    unlocked = achievement_id in st.session_state.achievements.awarded_ids
+                    msg = (
+                        f"Discovery achieved for <strong>{html.escape(target.name)}</strong>. "
+                        f"Achievement: <strong>{html.escape(achievement_name)}</strong>"
                     )
+                    if unlocked:
+                        msg += f". Preset <strong>{html.escape(preset_name)}</strong> is unlocked."
+                    else:
+                        msg += " (award may appear as a toast when conditions are evaluated)."
+                    tooltips.note(msg)
+                if target.id == "bitcoin_2009":
+                    tooltips.note(
+                        "Notice what you did <em>not</em> need: a supply-cap parameter. "
+                        "Bitcoin's cap is the sum of the halving series, not a constant in the rules."
+                    )
+            else:
+                if target.id == "bitcoin_2009":
+                    with st.expander("The teaching moment (spoiler-light)"):
+                        st.write(
+                            "Bitcoin's 21 million cap is not written as a constant. It is the sum of "
+                            "the halving series. If you are stuck on the cap, try asking what the "
+                            "halving interval does to the total over a very long time."
+                        )
+                else:
+                    with st.expander("The teaching moment (spoiler-light)"):
+                        st.write(
+                            "Compare the riddle to your settings: consensus, pace of blocks, issuance/halving, "
+                            "fees/burn, and launch supply. This target is an educational abstraction, so focus "
+                            "on the core design tradeoffs rather than exact historical minutiae."
+                        )
 
     # -- Achievements ------------------------------------------------------
     with tabs[3]:

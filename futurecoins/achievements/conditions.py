@@ -34,8 +34,11 @@ class RunSummary:
     # Every event that has fired during this run, oldest first.
     events: tuple[EventLogEntry, ...] = ()
 
-    # Similarity against the Bitcoin 2009 target, if Discovery Mode was used.
+    # Backward-compatible Bitcoin 2009 discovery score.
     discovery_score: float | None = None
+
+    # Per-target discovery similarity scores (target_id -> score in 0..1).
+    discovery_scores: dict[str, float] = field(default_factory=dict)
 
     # 800-character grid snapshot (see snapshots.py). Stored with the award.
     snapshot: str = ""
@@ -56,9 +59,28 @@ def survivor(summary: RunSummary) -> bool:
     return summary.tick >= 1825 and summary.metrics.health > 0.0
 
 
+def _discovery_score(summary: RunSummary, target_id: str, legacy: float | None = None) -> float:
+    scores = getattr(summary, "discovery_scores", {}) or {}
+    if target_id in scores:
+        return float(scores[target_id] or 0.0)
+    if legacy is not None:
+        return float(legacy or 0.0)
+    return float(summary.discovery_score or 0.0) if target_id == "bitcoin_2009" else 0.0
+
+
 def genesis_discovery(summary: RunSummary) -> bool:
     """Reconstructed Bitcoin 2009 to at least 95 % similarity."""
-    return (summary.discovery_score or 0.0) >= 0.95
+    return _discovery_score(summary, "bitcoin_2009", summary.discovery_score) >= 0.95
+
+
+def ethereum_discovery(summary: RunSummary) -> bool:
+    """Reconstructed Ethereum 2015 (early-era abstraction) to >= 95% similarity."""
+    return _discovery_score(summary, "ethereum_2015") >= 0.95
+
+
+def solana_discovery(summary: RunSummary) -> bool:
+    """Reconstructed Solana 2020 (launch-era abstraction) to >= 95% similarity."""
+    return _discovery_score(summary, "solana_2020") >= 0.95
 
 
 def crisis_survivor(summary: RunSummary) -> bool:
@@ -133,6 +155,28 @@ ACHIEVEMENT_DEFS: tuple[AchievementDef, ...] = (
         icon="🔍",
         condition=genesis_discovery,
         hint="Open Discovery Mode and read the riddle carefully.",
+    ),
+    AchievementDef(
+        id="ethereum_discovery",
+        name="Frontier Discovery",
+        description=(
+            "Reconstruct the Ethereum 2015 early-era abstraction with at least 95 % similarity "
+            "(educational model, not a 1:1 historical reproduction)."
+        ),
+        icon="🧭",
+        condition=ethereum_discovery,
+        hint="Use Discovery Mode: a fast programmable early network with a launch allocation.",
+    ),
+    AchievementDef(
+        id="solana_discovery",
+        name="High-Throughput Discovery",
+        description=(
+            "Reconstruct the Solana 2020 launch-era abstraction with at least 95 % similarity "
+            "(educational model, not a 1:1 historical reproduction)."
+        ),
+        icon="⚡",
+        condition=solana_discovery,
+        hint="Use Discovery Mode: staked validators, very fast blocks, low fees, and fee burn.",
     ),
     AchievementDef(
         id="crisis_survivor",

@@ -46,6 +46,8 @@ class ParamScore:
     confidence: str
     value: float | str | None
     target: float | str | None
+    hint_low: str = ""
+    hint_high: str = ""
 
 
 @dataclass(frozen=True)
@@ -101,6 +103,8 @@ def score_config(config: SimConfig, target: Target) -> ScoreBreakdown:
                 confidence=spec.confidence,
                 value=value,
                 target=spec.target,
+                hint_low=spec.hint_low,
+                hint_high=spec.hint_high,
             )
         )
 

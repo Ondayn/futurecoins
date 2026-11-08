@@ -13,9 +13,11 @@ from .conditions import (
     AchievementDef,
     RunSummary,
     crisis_survivor,
+    ethereum_discovery,
     first_currency,
     genesis_discovery,
     network_architect,
+    solana_discovery,
     survivor,
 )
 from .manager import AchievementManager, Award
@@ -30,8 +32,10 @@ __all__ = [
     "crisis_survivor",
     "decode_snapshot",
     "encode_snapshot",
+    "ethereum_discovery",
     "first_currency",
     "genesis_discovery",
     "network_architect",
+    "solana_discovery",
     "survivor",
 ]
