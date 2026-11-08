@@ -105,12 +105,30 @@ h1, h2, h3 { letter-spacing: -0.02em; }
    space beside it. */
 :root { --fc-grid-max: clamp(280px, calc(100vh - 320px), 800px); }
 
-/* The tab panel scrolls inside itself, so the page itself stays put. It gets
-   the same height budget as the board: the graph is not squeezed to fit it. */
+/* The tab panel scrolls inside itself. Made visually obvious (scrollbar + cue).
+   min-height reduces layout "jump" when switching to a shorter tab. */
 [data-testid="stTabs"] [role="tabpanel"] {
+  min-height: clamp(160px, 28vh, 360px);
   max-height: clamp(180px, calc(100vh - 320px), 720px);
   overflow-y: auto;
   padding-right: 0.35rem;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(94, 234, 212, 0.45) rgba(30, 45, 74, 0.35);
+  box-shadow: inset 0 -10px 10px -12px rgba(94, 234, 212, 0.18);
+}
+[data-testid="stTabs"] [role="tabpanel"]::-webkit-scrollbar { width: 8px; }
+[data-testid="stTabs"] [role="tabpanel"]::-webkit-scrollbar-track {
+  background: rgba(30, 45, 74, 0.35);
+  border-radius: 999px;
+}
+[data-testid="stTabs"] [role="tabpanel"]::-webkit-scrollbar-thumb {
+  background: rgba(94, 234, 212, 0.45);
+  border-radius: 999px;
+}
+[data-testid="stTabs"] [role="tabpanel"]::-webkit-scrollbar-thumb:hover {
+  background: rgba(94, 234, 212, 0.65);
 }
 
 /* Two-column game layout: board on the left, tabs on the right.
@@ -140,8 +158,13 @@ h1, h2, h3 { letter-spacing: -0.02em; }
   }
 }
 @media (max-width: 1200px), (max-aspect-ratio: 3/2) {
-  :root { --fc-grid-max: clamp(320px, 60vh, 620px); }
-  [data-testid="stTabs"] [role="tabpanel"] { max-height: 42vh; }
+  /* Narrow or portrait-ish: stack and keep scroll behavior consistent by
+     resizing the grid rather than forcing awkward nested scroll. */
+  :root { --fc-grid-max: clamp(240px, min(82vw, 52vh), 560px); }
+  [data-testid="stTabs"] [role="tabpanel"] {
+    min-height: clamp(140px, 24vh, 300px);
+    max-height: min(46vh, 420px);
+  }
   .st-key-fc-split [data-testid="stHorizontalBlock"] {
     flex-direction: column;
     gap: 0.7rem;
@@ -151,6 +174,22 @@ h1, h2, h3 { letter-spacing: -0.02em; }
     max-width: none !important;
     flex: 1 1 auto !important;
     min-width: 0 !important;
+  }
+}
+/* Very short viewports (e.g., landscape phone, small laptop height): shrink the
+   grid and tab panel so a single scroll pattern remains usable. */
+@media (max-height: 720px) {
+  :root { --fc-grid-max: clamp(220px, min(70vw, calc(100vh - 360px)), 520px); }
+  [data-testid="stTabs"] [role="tabpanel"] {
+    min-height: 120px;
+    max-height: clamp(140px, calc(100vh - 380px), 360px);
+  }
+}
+@media (max-height: 560px) {
+  :root { --fc-grid-max: clamp(180px, min(64vw, calc(100vh - 300px)), 360px); }
+  [data-testid="stTabs"] [role="tabpanel"] {
+    min-height: 100px;
+    max-height: clamp(120px, calc(100vh - 320px), 240px);
   }
 }
 
