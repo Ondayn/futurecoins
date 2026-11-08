@@ -1,16 +1,16 @@
 """Grid projection and HTML rendering.
 
-The grid is a *projection* of the agent population, not the simulation itself.
-When there are more agents than cells, a cell represents a **cohort** and shows
-the dominant role. The real population is always displayed separately, because
-confusing "800 cells" with "800 agents" is the easiest way to teach the wrong
-lesson.
+The grid is a 1:1 *projection* of agents onto cells (one displayed agent per
+cell). This keeps the core metaphor clear: you watch individuals live under the
+rules.
 
-Rendering is a CSS grid with fluid, equal-width cells. Emoji are not
-monospaced, so a plain string grid drifts; a fixed cell box removes the problem
-entirely. Offline agents are rendered as empty cells: the grid only shows who is
-actually online, and a cell with no active agent leaves a blank slot so the
-board geometry stays stable.
+When the population exceeds the grid, we show a **deterministic sampled view**
+(stable for a given seed and population) and always display real totals
+separately. We do not blend cohorts, because cohort averaging hides state
+changes and makes the grid ambiguous.
+
+Rendering uses a CSS grid with fluid, equal-width cells. Offline agents are
+rendered as empty cells so the board geometry stays stable.
 """
 
 from __future__ import annotations
@@ -21,78 +21,80 @@ from dataclasses import dataclass
 
 from .agents import ROLE_META, Agent, Role
 
-# Fixed role order, used to break ties when a cohort has no majority role.
-_ROLE_ORDER = {
-    Role.MINER: 0,
-    Role.VALIDATOR: 1,
-    Role.USER: 2,
-    Role.TRADER: 3,
-    Role.DEVELOPER: 4,
-    Role.ATTACKER: 5,
-}
-
 
 @dataclass(frozen=True)
 class Cell:
-    """One rendered cell: either a single agent or a cohort."""
+    """One rendered cell representing a single displayed agent."""
 
     row: int
     col: int
     role: Role
-    count: int
-    active: int
+    count: int  # always 1 in 1:1 view (kept for compatibility)
+    active: int  # 0 or 1
 
     @property
     def active_ratio(self) -> float:
-        return self.active / self.count if self.count else 0.0
+        return float(self.active) if self.count else 0.0
 
     @property
     def label(self) -> str:
         name = ROLE_META[self.role]["label"]
-        if self.active == 0:
-            return (
-                f"{self.count} offline agent{'s' if self.count != 1 else ''} · "
-                f"cell {self.row},{self.col} · hidden from the grid"
-            )
-        if self.count == 1:
-            return f"{name} · cell {self.row},{self.col} · active"
-        return (
-            f"{self.count} agents · {name} (dominant) · {self.active} active · "
-            f"cell {self.row},{self.col}"
-        )
+        state = "active" if self.active else "offline"
+        return f"{name} · cell {self.row},{self.col} · {state}"
 
 
-def project(agents: list[Agent], rows: int, cols: int) -> list[list[Cell | None]]:
-    """Assign agents to cells.
+def _stable_rank(seed: int, agent_id: int) -> int:
+    """Deterministic rank for sampling (no reliance on PYTHONHASHSEED)."""
+    x = (seed * 0x9E3779B1) ^ (agent_id * 0x85EBCA77)
+    x &= 0xFFFFFFFF
+    x ^= x >> 16
+    x = (x * 0x7FEB352D) & 0xFFFFFFFF
+    x ^= x >> 15
+    x = (x * 0x846CA68B) & 0xFFFFFFFF
+    x ^= x >> 16
+    return x
 
-    Agents already carry a (row, col) assigned at genesis, so this is a grouping
-    operation, not a physics simulation. That is deliberate: it keeps the grid
-    O(n) and keeps the engine independent of the view.
+
+def sample_agents(agents: list[Agent], rows: int, cols: int, seed: int = 0) -> list[Agent]:
+    """Deterministically select up to rows*cols agents for display."""
+    capacity = max(0, rows * cols)
+    if len(agents) <= capacity:
+        return list(agents)
+    ranked = sorted(agents, key=lambda a: (_stable_rank(seed, a.id), a.id))
+    return ranked[:capacity]
+
+
+def project(
+    agents: list[Agent], rows: int, cols: int, *, seed: int = 0
+) -> tuple[list[list[Cell | None]], dict[int, tuple[int, int]], int]:
+    """Project agents onto a 1:1 grid.
+
+    Returns (grid, display_pos_by_agent_id, sampled_count). When the population
+    exceeds grid capacity, a deterministic sampled subset is displayed in unique
+    cells (display positions are assigned for the view).
     """
-    buckets: dict[tuple[int, int], list[Agent]] = {}
-    for agent in agents:
-        row = min(max(agent.row, 0), rows - 1)
-        col = min(max(agent.col, 0), cols - 1)
-        buckets.setdefault((row, col), []).append(agent)
-
+    displayed = sample_agents(agents, rows, cols, seed)
+    sampled_count = len(displayed)
     grid: list[list[Cell | None]] = [[None] * cols for _ in range(rows)]
+    display_pos: dict[int, tuple[int, int]] = {}
 
-    for (row, col), group in buckets.items():
-        # Show the dominant *active* role, so a cell never displays a role that
-        # is entirely offline while another role in the same cohort is working.
-        online = [a for a in group if a.active]
-        visible = online or group
-        counts = Counter(a.role for a in visible)
-        # Deterministic tie-break: most common role, then fixed role order.
-        dominant = min(
-            counts.items(),
-            key=lambda item: (-item[1], _ROLE_ORDER[item[0]]),
-        )[0]
-        grid[row][col] = Cell(
-            row=row, col=col, role=dominant, count=len(group), active=len(online)
+    # Assign displayed agents to unique cells in row-major order for a stable,
+    # readable layout (independent of their canonical/stored positions).
+    for idx, agent in enumerate(displayed):
+        r = idx // cols
+        c = idx % cols
+        if r >= rows:
+            break
+        display_pos[agent.id] = (r, c)
+        grid[r][c] = Cell(
+            row=r,
+            col=c,
+            role=agent.role,
+            count=1,
+            active=1 if agent.active else 0,
         )
 
-    return grid
+    return grid, display_pos, sampled_count
 
 
 def render_html(
@@ -103,17 +105,7 @@ def render_html(
     active_cells: set[tuple[int, int]] | None = None,
     tick: int = 0,
 ) -> str:
-    """Turn a projected grid into a self-contained HTML fragment.
-
-    ``active_cells`` are the (row, col) positions that produced a block this
-    tick. They are highlighted so the board shows *activity*, not just state:
-    a network that is running but doing nothing would otherwise look frozen.
-    """
-    """Turn a projected grid into a self-contained HTML fragment.
-
-    The caller (Streamlit) only has to pass this string to `st.html`. No
-    Streamlit import lives in this file.
-    """
+    """Turn a projected grid into a self-contained HTML fragment."""
     rows = len(grid)
     cols = len(grid[0]) if rows else 0
 
@@ -129,12 +121,6 @@ def render_html(
         for col_idx, cell in enumerate(row):
             produced = (row_idx, col_idx) in active
 
-            # Three visual states:
-            #   no agent assigned -> faint dot (the slot exists but is empty)
-            #   agent offline     -> fully blank (the agent has disappeared)
-            #   agent online      -> role glyph
-            # Keeping the two empty states distinct stops an underpopulated
-            # board from looking like a dead network.
             if cell is None:
                 classes = ["fc-cell", "fc-slot"]
                 if produced:
@@ -145,9 +131,7 @@ def render_html(
                 continue
 
             if cell.active == 0:
-                title = (
-                    f' title="{html.escape(cell.label)}"' if show_titles else ""
-                )
+                title = f' title="{html.escape(cell.label)}"' if show_titles else ""
                 classes = ["fc-cell", "fc-empty"]
                 if produced:
                     classes.append("fc-produced")
@@ -162,11 +146,8 @@ def render_html(
             if produced:
                 classes.append("fc-produced")
 
-            # Opacity encodes how much of the cohort is active.
             opacity = 0.35 + 0.65 * cell.active_ratio
-            title = (
-                f' title="{html.escape(cell.label)}"' if show_titles else ""
-            )
+            title = f' title="{html.escape(cell.label)}"' if show_titles else ""
             parts.append(
                 f'<span class="{" ".join(classes)}" style="opacity:{opacity:.2f}"{title}>'
                 f"{glyph}</span>"
@@ -176,31 +157,27 @@ def render_html(
     return "".join(parts)
 
 
-def population_summary(agents: list[Agent], rows: int, cols: int) -> str:
+def population_summary(
+    agents: list[Agent], rows: int, cols: int, *, sampled: int | None = None
+) -> str:
     """The sentence that must always accompany the grid."""
     cells = rows * cols
     population = len(agents)
     inactive = sum(1 for agent in agents if not agent.active)
     hidden = f" · {inactive:,} offline (hidden)" if inactive else " · all active"
-    if population <= cells:
-        return f"{population:,} agents · {cells:,} cells · 1 agent per cell{hidden}"
-    per_cell = population / cells
-    return (
-        f"{population:,} agents · {cells:,} cells · "
-        f"~{per_cell:.1f} agents per cell (cohorts){hidden}"
-    )
+    if sampled is not None and sampled < population:
+        return (
+            f"{population:,} agents · showing {sampled:,} of {cells:,} cells "
+            f"(1:1 sampled view, deterministic){hidden}"
+        )
+    return f"{population:,} agents · {cells:,} cells · 1 agent per cell{hidden}"
 
 
 def legend_html(
     total: Counter[Role] | None = None,
     active: Counter[Role] | None = None,
 ) -> str:
-    """A compact legend, generated from the same role metadata as the grid.
-
-    When live counts are supplied, each role also shows ``online/total``. That
-    turns the legend into the role breakdown, so the interface does not need a
-    second caption line under the board.
-    """
+    """A compact legend with optional live online/total counts."""
     items: list[str] = []
     for role, meta in ROLE_META.items():
         count = ""

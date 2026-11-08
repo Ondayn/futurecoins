@@ -12,20 +12,18 @@ from ..grid import legend_html, population_summary, project, render_html
 
 
 def render(sim: Simulation, *, ascii_mode: bool = False) -> None:
-    """Draw the animated grid, its population line, and the role legend."""
+    """Draw the grid (1:1, sampled when population exceeds cells), population, legend."""
     config = sim.config
-    projected = project(sim.agents, config.rows, config.cols)
+    projected, display_pos, sampled = project(
+        sim.agents, config.rows, config.cols, seed=config.seed
+    )
 
-    # Cells that produced a block this tick glow, so the board shows activity
-    # even on a day when nobody joins or leaves.
+    # Highlight displayed cells whose agents produced a block this tick.
     active_cells: set[tuple[int, int]] = set()
-    by_id = {agent.id: agent for agent in sim.agents}
     for agent_id in getattr(sim.last_production, "reward_by_agent", {}):
-        agent = by_id.get(agent_id)
-        if agent is not None:
-            row = min(max(agent.row, 0), config.rows - 1)
-            col = min(max(agent.col, 0), config.cols - 1)
-            active_cells.add((row, col))
+        pos = display_pos.get(agent_id)
+        if pos is not None:
+            active_cells.add(pos)
 
     st.html(
         render_html(
@@ -37,10 +35,9 @@ def render(sim: Simulation, *, ascii_mode: bool = False) -> None:
         )
     )
 
-    st.caption(population_summary(sim.agents, config.rows, config.cols))
+    st.caption(population_summary(sim.agents, config.rows, config.cols, sampled=sampled))
 
-    # The legend doubles as the live role breakdown: one line of chrome instead
-    # of a caption plus a legend, which matters when the board is height-bound.
+    # Legend shows real live role counts (not just sampled view).
     counts = Counter(agent.role for agent in sim.agents)
     active = Counter(agent.role for agent in active_agents(sim.agents))
     st.html(legend_html(counts, active))

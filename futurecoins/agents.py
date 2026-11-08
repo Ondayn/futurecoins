@@ -128,11 +128,12 @@ _GENESIS_SHARES: dict[Role, float] = {
 
 
 def make_population(config: SimConfig, rng: random.Random) -> list[Agent]:
-    """Create the starting agents and place them on the grid.
+    """Create the starting agents and assign canonical grid positions.
 
-    Placement is deterministic: the same seed always produces the same grid.
-    Cells are shuffled once and dealt out; when there are more agents than
-    cells, several agents share a cell (a *cohort*).
+    Placement is deterministic (seeded). Cells are shuffled once and assigned;
+    when the population exceeds grid cells, multiple agents may share a canonical
+    position, but the *visual* grid uses a deterministic 1:1 sampled view (no
+    cohort blending). See `futurecoins.grid`.
 
     Parameters
     ----------
