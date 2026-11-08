@@ -581,39 +581,62 @@ def live_view() -> None:
     with tabs[2]:
         st.markdown("### Discovery Mode")
         st.caption(
-            "Reconstruct currencies from their behaviour. Similarity feedback appears only after you run the "
-            "simulation (no pre-run percentage clue). Targets are educational abstractions with stated confidence."
+            "Reconstruct mystery currencies from their behaviour. Similarity feedback appears only after you run "
+            "the simulation (no pre-run percentage clue). Targets are educational abstractions with stated confidence."
         )
-        target_options = {f"{t.name} — {t.era}": t for t in TARGETS.values()}
-        selected_target_label = st.selectbox(
-            "Target",
-            options=list(target_options.keys()),
-            key="discovery_target",
-            help="Choose which currency to reconstruct. Hints and scores apply to the selected target.",
-        )
-        target = target_options[selected_target_label]
-        if st.session_state.get("_discovery_target_prev") != target.id:
-            st.session_state.hints_shown = 1
-            st.session_state["_discovery_target_prev"] = target.id
 
-        st.markdown(f"#### {target.name} — {target.era}")
-        st.markdown(f"> *{target.riddle}*")
-        st.markdown("")
-
-        # Map target -> preset/achievement for unlock messaging
+        # Map target -> preset/achievement/unlock metadata (used for reveal + unlock messaging)
         target_unlocks = {
             "bitcoin_2009": ("Bitcoin 2009", "genesis_discovery", "Genesis Discovery"),
             "ethereum_2015": ("Ethereum 2015", "ethereum_discovery", "Frontier Discovery"),
             "solana_2020": ("Solana 2020", "solana_discovery", "High-Throughput Discovery"),
         }
+        awarded = st.session_state.achievements.awarded_ids
+
+        target_options: dict[str, tuple] = {}
+        for idx, (target_id, target_obj) in enumerate(TARGETS.items(), start=1):
+            mystery_label = f"Mystery Currency {idx:03d}"
+            unlock = target_unlocks.get(target_id)
+            revealed = bool(unlock and unlock[1] in awarded)
+            display = f"{mystery_label} — Discovered: {target_obj.name}" if revealed else mystery_label
+            target_options[display] = (target_obj, mystery_label, revealed)
+
+        selected_target_label = st.selectbox(
+            "Target",
+            options=list(target_options.keys()),
+            key="discovery_target",
+            help="Choose a mystery currency to reconstruct. Names stay hidden until discovered.",
+        )
+        target, mystery_label, revealed_before_run = target_options[selected_target_label]
+        if st.session_state.get("_discovery_target_prev") != target.id:
+            st.session_state.hints_shown = 1
+            st.session_state["_discovery_target_prev"] = target.id
 
         if sim.tick == 0:
+            st.markdown(f"#### {mystery_label}")
+            st.markdown(f"> *{target.riddle}*")
+            st.markdown("")
             st.html('<div class="fc-note">Set up your currency, press <strong>⚙️ Apply config</strong>, '
                     'then press <strong>▶ Run</strong>. Similarity feedback appears after the simulation starts, '
-                    'so you discover the match by observing behaviour — not from a pre-run percentage clue.</div>')
-            st.caption(target.caveat)
+                    'so you discover the match by observing behaviour — not from a pre-run percentage clue. '
+                    'The currency name stays hidden until you reconstruct it.</div>')
+            caveat = (
+                target.caveat
+                if revealed_before_run
+                else "Educational abstraction with stated parameter confidence. "
+                     "Parameters marked medium or low confidence count for less in the score. "
+                     "The currency identity is hidden until discovered."
+            )
+            st.caption(caveat)
         else:
             breakdown = score_config(sim.config, target)
+            discovered_now = breakdown.total >= 0.95
+            reveal_name = revealed_before_run or discovered_now
+            header = f"{mystery_label} — Discovered: {target.name} ({target.era})" if reveal_name else mystery_label
+            st.markdown(f"#### {header}")
+            st.markdown(f"> *{target.riddle}*")
+            st.markdown("")
+
             st.metric("Similarity", f"{breakdown.total:.1%}")
             st.progress(min(max(breakdown.total, 0.0), 1.0))
 
@@ -622,7 +645,14 @@ def live_view() -> None:
             if misses:
                 st.caption("Close but not exact: " + ", ".join(misses))
             st.markdown("")
-            st.caption(target.caveat)
+            caveat = (
+                target.caveat
+                if reveal_name
+                else "Educational abstraction with stated parameter confidence. "
+                     "Parameters marked medium or low confidence count for less in the score. "
+                     "The currency identity is hidden until discovered."
+            )
+            st.caption(caveat)
 
             st.markdown("#### How the score is built")
             st.caption(
@@ -645,7 +675,10 @@ def live_view() -> None:
             hints = build_hints(breakdown, limit=3)
             shown = min(st.session_state.hints_shown, len(hints))
             if not hints:
-                st.success("Every parameter matches this target's abstraction. You have reconstructed it.")
+                if reveal_name:
+                    st.success(f"Every parameter matches {target.name}'s abstraction. You have reconstructed it.")
+                else:
+                    st.success("Every parameter matches this mystery target's abstraction. You have reconstructed it.")
             for hint in hints[:shown]:
                 st.html(f'<div class="fc-hint">💡 {html.escape(hint)}</div>')
             if shown < len(hints) and st.button("Reveal another hint", key=f"more_hints_{target.id}"):
@@ -653,12 +686,12 @@ def live_view() -> None:
                 st.rerun()
 
             unlock = target_unlocks.get(target.id)
-            if breakdown.total >= 0.95:
+            if discovered_now:
                 if unlock:
                     preset_name, achievement_id, achievement_name = unlock
-                    unlocked = achievement_id in st.session_state.achievements.awarded_ids
+                    unlocked = achievement_id in awarded
                     msg = (
-                        f"Discovery achieved for <strong>{html.escape(target.name)}</strong>. "
+                        f"Discovery achieved for <strong>{html.escape(target.name)}</strong> ({html.escape(mystery_label)}). "
                         f"Achievement: <strong>{html.escape(achievement_name)}</strong>"
                     )
                     if unlocked:
@@ -672,7 +705,7 @@ def live_view() -> None:
                         "Bitcoin's cap is the sum of the halving series, not a constant in the rules."
                     )
             else:
-                if target.id == "bitcoin_2009":
+                if target.id == "bitcoin_2009" and reveal_name:
                     with st.expander("The teaching moment (spoiler-light)"):
                         st.write(
                             "Bitcoin's 21 million cap is not written as a constant. It is the sum of "
