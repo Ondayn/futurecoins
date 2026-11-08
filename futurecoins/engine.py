@@ -272,7 +272,16 @@ class Simulation:
             if self.total_supply > 1.0
             else 0.0
         )
-        economic_stress = compute_economic_stress(inflation_rate_est, self.economy.volatility)
+        from .config import NEVER
+
+        scheduled_halving = self.config.monetary.halving_interval_blocks < NEVER / 10
+        economic_stress = compute_economic_stress(
+            inflation_rate_est,
+            self.economy.volatility,
+            scheduled_halving=scheduled_halving,
+            supply=self.total_supply,
+            issuance=production.issuance,
+        )
         health = network_health(
             participation=participation,
             concentration=production.concentration,
@@ -726,7 +735,16 @@ class Simulation:
             # Annualised: 365 ticks in a simulated year.
             inflation_rate = (production.issuance * 365.0 / total_supply) * 100.0
 
-        economic_stress = compute_economic_stress(inflation_rate, self.economy.volatility)
+        from .config import NEVER
+
+        scheduled_halving = self.config.monetary.halving_interval_blocks < NEVER / 10
+        economic_stress = compute_economic_stress(
+            inflation_rate,
+            self.economy.volatility,
+            scheduled_halving=scheduled_halving,
+            supply=total_supply,
+            issuance=production.issuance,
+        )
         health = network_health(
             participation=participation,
             concentration=concentration,

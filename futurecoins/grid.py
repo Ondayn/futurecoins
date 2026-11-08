@@ -4,10 +4,10 @@ The grid is a 1:1 *projection* of agents onto cells (one displayed agent per
 cell). This keeps the core metaphor clear: you watch individuals live under the
 rules.
 
-When the population exceeds the grid, we show a **deterministic sampled view**
-(stable for a given seed and population) and always display real totals
-separately. We do not blend cohorts, because cohort averaging hides state
-changes and makes the grid ambiguous.
+When the population exceeds the grid, we show a **deterministic sampled snapshot
+of part of the population** (stable for a given seed and population) and always
+display real totals separately. This avoids misleading averaging and keeps
+state changes legible.
 
 Rendering uses a CSS grid with fluid, equal-width cells. Offline agents are
 rendered as empty cells so the board geometry stays stable.

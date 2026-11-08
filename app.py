@@ -109,6 +109,7 @@ def _guide_html(*, compact: bool = False) -> str:
         '<div class="fc-guide-card"><h4>💡 Tips</h4><ul>'
         "<li>Speed changes ticks per frame (1/2/5/20); the frame rate stays at 1 fps.</li>"
         "<li>Grey/blank cells: offline agents disappear; faint dots are unassigned slots.</li>"
+        "<li>If the population is larger than the grid, the board shows a <strong>snapshot of part</strong> of the population (1:1, deterministic). Indicators still use the full population.</li>"
         "<li>If health drops below 15 for 5 ticks, or all users leave, the currency can <strong>fail</strong> and the simulation ends.</li>"
         "<li>If every agent goes offline, the network is <strong>dead</strong> — press Reset.</li>"
         "</ul></div>"
@@ -185,6 +186,74 @@ def _param_value(key: str, value: object) -> str:
     if key == "tx_per_block" and value is not None:
         return f"{float(value):,.0f}"
     return str(value)
+
+
+def _parameter_insights(sim: Simulation) -> list[str]:
+    """Explain why current parameters/conditions may help or hurt trust, security, and health."""
+    cfg = sim.config
+    m = sim.metrics
+    notes: list[str] = []
+    never_halves = cfg.monetary.halving_interval_blocks >= NEVER / 10
+
+    if never_halves and cfg.monetary.initial_block_reward > 0:
+        notes.append(
+            "**No halving (reward never declines):** ongoing issuance can stay high, which may drive "
+            "inflation and economic stress. That hurts perceived value and **trust**, and can lower "
+            "cryptocurrency network health if supply grows faster than sustainable demand."
+        )
+    if getattr(m, "economic_stress", 0.0) > 0.15:
+        notes.append(
+            f"**Economic stress is active ({m.economic_stress:.0%}):** extreme inflation and/or volatility "
+            "is penalizing network health in this model. Bad monetary choices can reduce **trust** and "
+            "make participation less stable over time."
+        )
+    if m.concentration > 0.25:
+        notes.append(
+            f"**High concentration ({m.concentration:.0%} Herfindahl):** block production is dominated by "
+            "fewer producers, which weakens decentralization and can reduce **security** (easier to "
+            "capture or disrupt)."
+        )
+    if cfg.network.consensus == "pow" and cfg.network.block_time_s <= 5.0:
+        notes.append(
+            "**Very fast PoW block time:** hard to secure in practice and can create unrealistically high "
+            "block capacity, which may hide congestion/fee signals and make **reliability** look better "
+            "than the design deserves."
+        )
+    cap_day = cfg.blocks_per_tick * cfg.network.tx_per_block
+    if sim.tick > 0 and cap_day > 1_000_000 and m.congestion < 0.02 and m.reliability > 0.99:
+        notes.append(
+            "**Over-provisioned capacity:** daily transaction capacity is extremely high relative to current "
+            "use, so congestion/fees may not appear. **Reliability** can stay near 100% even if other economic "
+            "choices are poor—check inflation, volatility, and economic stress."
+        )
+    if cfg.population > 3000:
+        notes.append(
+            "**Very large genesis population:** unrealistic for a brand-new network. Large starting "
+            "populations can distort bootstrapping dynamics and make early **trust/adoption** signals harder "
+            "to interpret."
+        )
+    elif cfg.population > 1200:
+        notes.append(
+            "**Large starting population:** may be high for a first-run/genesis scenario; consider smaller "
+            "populations to see clearer bootstrapping and **trust** dynamics."
+        )
+    if m.reliability < 0.8 and sim.tick > 0:
+        notes.append(
+            "**Low reliability:** users experience dropped/failed transactions, which reduces **trust** and "
+            "can push confidence down, leading to churn."
+        )
+    if sim.tick > 0 and m.sentiment < 0.35:
+        notes.append(
+            "**Low sentiment/trust:** negative mood (from shocks, poor performance, or stress) can reduce "
+            "demand and participation, reinforcing weakness."
+        )
+    if not notes:
+        notes.append(
+            "No major red flags detected from the current parameters and indicators. Use the breakdown and "
+            "event log to see how **trust (sentiment/confidence)**, **security**, and **reliability** respond "
+            "as conditions change."
+        )
+    return notes
 
 
 # ---------------------------------------------------------------------------
@@ -279,10 +348,6 @@ with st.sidebar:
         st.session_state.running = not st.session_state.running
         st.rerun()
     if right.button("↺ Reset", width="stretch"):
-        st.session_state.sim.reset()
-        st.session_state.running = False
-        st.session_state.event_feed = []
-        st.rerun()
         st.session_state.sim.reset()
         st.session_state.running = False
         st.session_state.event_feed = []
@@ -617,6 +682,14 @@ def live_view() -> None:
             "The last notable changes, written as sentences by the engine. If a number "
             "surprised you, start here before changing a slider."
         )
+
+        st.markdown("#### Parameter impact (trust, security, reliability)")
+        st.caption(
+            "How your settings and current conditions can influence trust/confidence, security, and the "
+            "cryptocurrency network's health in this model."
+        )
+        for note in _parameter_insights(sim):
+            st.markdown(f"- {note}")
         recent = list(sim.recent_changes)[-10:]
         if recent:
             for change in reversed(recent):

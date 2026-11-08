@@ -196,7 +196,8 @@ class SimConfig:
 
     seed: int = 42
 
-    # Visual grid size. Cells, not agents: a cell can hold a cohort.
+    # Visual grid size (cells). If population exceeds cells, the grid shows a
+    # deterministic 1:1 sampled snapshot of part of the population.
     rows: int = 30
     cols: int = 30
 

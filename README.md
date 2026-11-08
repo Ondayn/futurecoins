@@ -17,10 +17,10 @@ consequences of your protocol and monetary decisions unfold.
 - **Design a currency.** Consensus mechanism, block time, initial supply, supply cap,
   block reward, halving interval, base fee, burn rate, population, and (in Advanced mode)
   per-role populations, costs, market damping and event frequency.
-- **Watch a population live under those rules.** 570–960 agents across six roles —
-  miners, validators, users, traders, developers and attackers — on a 30 × 30 grid.
-  When the population exceeds 900, each cell becomes a cohort and the interface always
-  shows population separately from cell count.
+- **Watch a population live under those rules.** Agents across six roles — miners,
+  validators, users, traders, developers and attackers — on a 30 × 30 grid. If the
+  population exceeds the grid, the board shows a deterministic 1:1 snapshot of part of
+  the population, and the interface always shows real totals separately.
 - **Read a dashboard.** Twelve metric cards grouped Network / Money / Market / Health,
   a decomposed health score with visible weights, and a live history chart.
 - **Survive random events.** Market crashes, congestion spikes, negative media and

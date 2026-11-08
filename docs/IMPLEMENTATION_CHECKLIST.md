@@ -45,10 +45,9 @@ change mid-run" — a guarantee that removes a whole class of bugs.
 
 ## Phase 2 — Grid + shell (2.5 h)
 
-- [ ] `simulation/grid.py`: `project()` — agents → cells, with cohorts.
+- [ ] `simulation/grid.py`: `project()` — agents → 1:1 cells; deterministic sampled snapshot when population > cells.
 - [ ] `render_html()` producing the CSS grid. No Streamlit import in this file.
-- [ ] **Verify:** population 4 000 on a 30×30 grid shows "~5 agents/cell" and still renders
-      900 cells.
+- [ ] **Verify:** population 4 000 on a 30×30 grid shows a clear sampled snapshot (e.g. "showing 900... 1:1 sampled view") while real totals remain accurate.
 - [ ] `app.py`: `st.session_state` holds one `Simulation`; sidebar has Run/Pause/Reset.
 - [ ] `@st.fragment(run_every="1s")` renders grid + metrics.
 - [ ] **Verify:** RUN animates, PAUSE stops, RESET restores tick 0.

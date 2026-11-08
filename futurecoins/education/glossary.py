@@ -636,15 +636,17 @@ GLOSSARY: tuple[GlossaryEntry, ...] = (
         category="Meta",
     ),
     GlossaryEntry(
-        term="Cohort",
-        short="Several agents represented by one grid cell.",
+        term="Sampled grid view",
+        short="When population exceeds the grid, the board shows part of it (1:1).",
         explanation=(
-            "When the population is larger than the grid, each cell stands for a group. The "
-            "cell shows the dominant role and its opacity shows how many are active."
+            "The grid has a fixed number of cells. If there are more agents than cells, "
+            "FutureCoins displays a deterministic snapshot of part of the population "
+            "(one agent per shown cell) so individuals stay legible. The selection is "
+            "stable for the same seed and population."
         ),
-        in_game="Population is always printed separately from cell count, so 800 cells never "
-        "gets mistaken for 800 agents.",
-        real_world="Maps use the same trick: one dot can represent a city or a million people.",
+        in_game="The caption/note explains when you're seeing a snapshot of part of the "
+        "population. All counts, indicators, and simulation behavior use the full population.",
+        real_world="Like a sample or dashboard view: you inspect a subset while totals track everyone.",
         category="Meta",
     ),
     GlossaryEntry(

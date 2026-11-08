@@ -77,7 +77,7 @@ The grid is the emotional centre of the game. It must *look alive*.
 | --- | --- | --- |
 | Grid size | 30 × 30 = 900 cells | Square board, readable emoji on a laptop |
 | Cell content | one emoji, coloured by role | Instant role recognition |
-| Cell meaning | one agent, or a cohort of agents | Population can exceed cell count |
+| Cell meaning | one displayed agent (1:1); deterministic snapshot when population > cells | Population can exceed cell count; totals always shown |
 | Offline agents | the cell becomes blank | The grid shows who is online, not who exists |
 | Empty slots | a faint dot | Never confused with an agent that left |
 | Update rate | 1 frame per tick, ~1–4 fps | Streamlit's minimum auto-rerun is 1 s |

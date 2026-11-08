@@ -144,7 +144,7 @@ for the right to validate blocks.
 ## Simulation and computing
 
 **Agent** — one simulated participant with its own balance, role and behaviour rules.
-*In the game:* one emoji, or a cohort of emoji when the population is large.
+*In the game:* one displayed agent per grid cell (1:1); when population exceeds the grid, the board shows a deterministic snapshot of part of the population while totals remain accurate.
 *Real world:* an agent-based model of a market, a city, or an epidemic.
 
 **Agent-based model (ABM)** — a simulation where global behaviour emerges from many

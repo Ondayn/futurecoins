@@ -19,11 +19,36 @@ from dataclasses import asdict, dataclass
 from .economy import clamp
 
 
-def compute_economic_stress(inflation_rate: float, volatility: float) -> float:
-    """0..1 stress from bad economics (extreme inflation, instability)."""
-    # Annualized %; >50%/yr starts to hurt, very high inflation is severe.
-    infl = clamp((abs(inflation_rate) - 50.0) / 250.0, 0.0, 1.0)
+def compute_economic_stress(
+    inflation_rate: float,
+    volatility: float,
+    *,
+    scheduled_halving: bool = False,
+    supply: float = 0.0,
+    issuance: float = 0.0,
+) -> float:
+    """0..1 stress from bad economics (extreme inflation, instability).
+
+    High early issuance in a *scheduled-halving* bootstrap (premine-less launch)
+    is treated more gently than runaway/unscheduled inflation, so legitimate
+    designs aren't mislabeled as "bad economics".
+    """
     vol = clamp(volatility / 0.12, 0.0, 1.0)
+
+    infl_raw = abs(inflation_rate)
+    if scheduled_halving:
+        # Bootstrap artifact: annualized % explodes when supply is tiny but issuance
+        # follows a declining halving schedule. Discount that phase.
+        bootstrap = 1.0
+        if supply > 1e-9 and issuance > 0:
+            years_of_supply = supply / (issuance * 365.0)
+            if years_of_supply < 1.0:
+                bootstrap = clamp(years_of_supply / 1.0, 0.05, 1.0)
+        infl = clamp((infl_raw - 150.0) / 600.0, 0.0, 1.0) * bootstrap
+    else:
+        # Unscheduled/perpetual high issuance is a stronger "bad choice" signal.
+        infl = clamp((infl_raw - 40.0) / 260.0, 0.0, 1.0)
+
     return clamp(0.65 * infl + 0.35 * vol, 0.0, 1.0)
 
 

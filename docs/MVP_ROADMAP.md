@@ -60,7 +60,7 @@ why "pure function" makes tests trivial.
 ### M2 · The grid — 2.5 h
 
 **Build:**
-- `grid.py`: `project(agents, rows, cols) -> cells` with cohort support.
+- `grid.py`: `project(agents, rows, cols, seed=...) -> (grid, display_pos, sampled)` with 1:1 sampled snapshot when population > cells.
 - `grid.render_html(cells)` producing the CSS grid.
 - `app.py`: sidebar controls (Run/Pause/Reset/Speed), `st.session_state` holding the
   `Simulation`, `@st.fragment(run_every="1s")` for the grid + metrics.

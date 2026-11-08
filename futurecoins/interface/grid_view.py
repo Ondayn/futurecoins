@@ -36,8 +36,14 @@ def render(sim: Simulation, *, ascii_mode: bool = False) -> None:
     )
 
     st.caption(population_summary(sim.agents, config.rows, config.cols, sampled=sampled))
+    if sampled < len(sim.agents):
+        st.html(
+            '<div class="fc-note">Grid shows a <strong>snapshot of part of the population</strong> '
+            f'({sampled:,} of {len(sim.agents):,} agents, 1:1, deterministic for this seed). '
+            'Counts, indicators, and behavior use the <strong>full</strong> population.</div>'
+        )
 
-    # Legend shows real live role counts (not just sampled view).
+    # Legend shows real live role counts (full population, not only the sampled view).
     counts = Counter(agent.role for agent in sim.agents)
     active = Counter(agent.role for agent in active_agents(sim.agents))
     st.html(legend_html(counts, active))

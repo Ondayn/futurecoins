@@ -370,8 +370,8 @@ platform, and whether the variation selector is present. A plain string grid dri
 
 ```python
 # simulation/grid.py  (engine side: pure data)
-def project(agents, rows, cols) -> list[list[Cell]]:
-    """Assign agents to cells; if population > rows*cols, cells are cohorts."""
+def project(agents, rows, cols, *, seed=0) -> tuple[list[list[Cell | None]], dict[int, tuple[int,int]], int]:
+    """Project agents to a 1:1 grid; if population > rows*cols, show a deterministic sampled snapshot."""
 
 def render_html(grid, legend) -> str:
     """Cells -> a CSS grid of <span> elements. No Streamlit import."""
@@ -395,9 +395,9 @@ def render_html(grid, legend) -> str:
 .fc-slot  { color: #1e2d4a; }             /* no agent was ever assigned */
 ```
 
-A CSS grid with fluid, equal cells removes the alignment problem entirely. Opacity encodes
-how much of a cohort is active, colour encodes role, and offline agents are blank rather
-than greyed out — the board shows the network that is running, not the one that used to.
+A CSS grid with fluid, equal cells removes the alignment problem entirely. Opacity/colour encode
+state and role; offline agents are blank rather than greyed out. When population exceeds the grid,
+the board shows a deterministic 1:1 snapshot of part of the population while totals/indicators cover everyone.
 
 The board is sized from the height first: `--fc-grid-max` is the budget left after the
 hero, the indicator cards, the population line and the legend, and `aspect-ratio` turns
