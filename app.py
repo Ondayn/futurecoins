@@ -594,6 +594,7 @@ def live_view() -> None:
                 st.markdown(f"**In this simulation**  \n{entry.in_game}")
                 st.markdown(f"**In the real world**  \n{entry.real_world}")
                 if entry.link:
+                    st.markdown("")
                     st.link_button(entry.link_label or "Learn more", entry.link)
 
         st.markdown("")
