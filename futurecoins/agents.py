@@ -1,8 +1,9 @@
 """Agents: the individual participants of the simulated network.
 
-An agent is one emoji on the grid (or one member of a cohort when the population
-is larger than the grid). Agents have a role, a balance, and a small set of
-behaviour rules.
+An agent is one simulated participant with a role, balance, and behavior rules.
+The visual grid shows one displayed agent per cell (1:1); when the population is
+larger than the grid, it shows a deterministic sampled snapshot of part of the
+population while totals/indicators use the full population.
 
 Design note
 -----------
@@ -132,8 +133,8 @@ def make_population(config: SimConfig, rng: random.Random) -> list[Agent]:
 
     Placement is deterministic (seeded). Cells are shuffled once and assigned;
     when the population exceeds grid cells, multiple agents may share a canonical
-    position, but the *visual* grid uses a deterministic 1:1 sampled view (no
-    cohort blending). See `futurecoins.grid`.
+    position, but the *visual* grid uses a deterministic 1:1 sampled snapshot
+    (part of the population, stable for the seed). See `futurecoins.grid`.
 
     Parameters
     ----------

@@ -1,6 +1,6 @@
 # FutureCoins — Game Design Document (v0.1)
 
-> Status: draft for approval. Nothing here is implemented yet.
+> Status: design reference (updated). The local free-to-play MVP is implemented (engine, Streamlit UI, tests, presets, Discovery Mode, achievements). Some original draft details evolved during implementation; this document remains a design/architecture reference.
 
 ---
 
@@ -83,16 +83,14 @@ The grid is the emotional centre of the game. It must *look alive*.
 | Update rate | 1 frame per tick, ~1–4 fps | Streamlit's minimum auto-rerun is 1 s |
 | Population display | always shown separately | Never imply 900 agents when there are 4,000 |
 
-**Cohort rule.** When `population > cells`, one cell represents
-`ceil(population / cells)` agents. The cell shows the *dominant active* role in that cohort
-and its opacity reflects how many of the cohort are active. The header always reads, e.g.:
+**Sampled-view rule (implemented).** When `population > cells`, the grid shows a deterministic **1:1 snapshot of part of the population** (one displayed agent per shown cell), stable for the same seed/population. Totals, indicators, and simulation behavior always use the **full population**. The UI makes the sampled view explicit, e.g.:
 
 ```
-Population: 4,820 agents · 900 cells · ~6 agents per cell (cohorts) · 42 offline (hidden)
+4,820 agents · showing 900 of 900 cells (1:1 sampled view, deterministic) · 42 offline (hidden)
 ```
 
-This is stated, not hidden. Confusing population with cell count is the single easiest
-way to teach the wrong lesson.
+This is stated, not hidden. Confusing a visible sample with the full population is the single easiest
+way to teach the wrong lesson. All indicators use the full population.
 
 **Sizing.** The board is square and sized from the *height* budget first: hero, indicator
 cards, population line and legend take their space, and the board fills what remains. A
@@ -292,18 +290,14 @@ per event.
 ## 8. Discovery Mode
 
 The player is given a target's *behaviour* description, never its parameters, and must
-reconstruct the configuration.
+reconstruct the configuration. Similarity feedback appears **after the simulation starts** (no pre-run percentage clue). Targets are educational abstractions with stated confidence/caveats.
 
-### Target: Bitcoin — Genesis, 2009
+### Implemented targets (abstractions)
+- **Bitcoin — Genesis, 2009** (`bitcoin_2009`): no premine, slow/predictable blocks, generous reward that halves on schedule, no burn, PoW/no stake. High-confidence core parameters; some early-era estimates marked lower confidence.
+- **Ethereum — Frontier, 2015 (early PoW-era abstraction)** (`ethereum_2015`): fast blocks, significant launch allocation/premine, no Bitcoin-style halving in the abstraction, no early fee-burn mechanism. Simplified; real Ethereum evolved over time.
+- **Solana — Launch era, 2020 (abstraction)** (`solana_2020`): PoS validators, very fast block/slot pace, high throughput, very low fees, partial fee burn, no Bitcoin-style halving in the abstraction. Simplified; real Solana mechanics/schedules differ.
 
-Shown to the player:
-
-> *"A network with no premine, no company, no foundation. Blocks arrive slowly and
-> predictably. The reward for making a block is generous at first and shrinks on a fixed
-> schedule. Nobody can burn coins. There are no validators, because there is no stake."*
-
-Hidden: the reference config. Compared with a weighted similarity score (see
-ARCHITECTURE §7).
+Each target has a weighted similarity score, visible breakdown, and progressive digit-free hints. Reaching **>= 95%** awards the matching discovery achievement and can unlock the corresponding preset.
 
 ### Feedback bands
 
@@ -339,14 +333,15 @@ That single insight is worth more than the whole score.
 | ID | Name | Condition |
 | --- | --- | --- |
 | `first_currency` | First Currency | Complete 1 tick with ≥ 1 active agent |
-| `survivor` | Survivor | 365 ticks (one simulated year) with health > 0 |
+| `survivor` | Survivor | 1825 ticks (five simulated years) with health > 0 |
 | `genesis_discovery` | Genesis Discovery | Bitcoin 2009 similarity ≥ 0.95 |
+| `ethereum_discovery` | Frontier Discovery | Ethereum 2015 early-era abstraction similarity ≥ 0.95 |
+| `solana_discovery` | High-Throughput Discovery | Solana 2020 launch-era abstraction similarity ≥ 0.95 |
 | `crisis_survivor` | Crisis Survivor | Survive a severity ≥ 0.6 event without health < 20 |
 | `network_architect` | Network Architect | ≥ 90 % participation and ≥ 50 active nodes for 100 ticks |
 
-Each award records: id, name, description, timestamp, config hash, final metrics, and a
-compact grid snapshot (900 characters, one per cell). Persisted to a local JSON file in
-the MVP; no database.
+Each award records: id, name, description, timestamp, config hash, seed, tick, metrics, and a
+compact grid snapshot (rows×cols characters). Persisted to a local JSON file in the MVP; no database. Awards can be exported/imported as JSON.
 
 ### NFT minting (optional, post-MVP)
 
@@ -401,16 +396,16 @@ Rules:
 
 ---
 
-## 12. Open questions for the creator
+## 12. Current status & further development
 
-1. **Hackathon deadline.** The MLH Solana Hackathon you're checked into closes
-   **2026-11-08 18:00 UTC** — roughly 20 hours from now. The full MVP above is ~16 focused
-   hours *if nothing goes wrong*, which for a first blockchain project it will. Do we build
-   the 20-hour cut (no Solana), or the full MVP for a later submission?
-2. **Language of the interface.** English or French? The docs are English; the UI could be
-   either. Mixing is worse than choosing.
-3. **Visual identity.** Emoji-only grid (fast, charming, inconsistent across OS) or emoji +
-   CSS colour coding (slower to build, far more readable)? Recommendation: both.
-4. **Bitcoin reference data confidence.** Some 2009 parameters are genuinely uncertain
-   (typical transactions per block). Accept "medium confidence" flags in the UI, or drop
-   uncertain parameters from the score?
+**Implemented (local MVP):** configurable currency + presets, 6-role agent simulation on a 30×30 grid (1:1 deterministic sampled snapshot when population > cells), PoW/PoS abstractions, dashboard/health/why/history, events, simplified economy/price index (model), Discovery Mode targets for **Bitcoin 2009, Ethereum 2015 (early-era abstraction), Solana 2020 (launch-era abstraction)** with weighted scoring/progressive digit-free hints and pre-run gating, achievements with snapshots + JSON export/import, glossary/resources, deterministic seeded runs, and tests/lint.
+
+**Discarded / evolved decisions (kept for context):** cohort-blended grid cells were replaced by a 1:1 sampled snapshot for legibility; “network health” means *cryptocurrency* network health (model), not internet connectivity; price/sentiment/health are model outputs (not forecasts).
+
+**Further development (deferred, not required for MVP):**
+- Add a Stable Utility Coin discovery target/unlock path (currently a locked mystery with no unlock route) and additional historical/educational targets.
+- Expand event/agent depth (e.g., governance/media/institutions as richer actors, more scenarios) and calibrate balance with more playtest data.
+- Improve onboarding/analytics-free UX polish, accessibility, and mobile-specific tuning (current design tested as usable on Android).
+- Optional post-MVP adapters only if desired later: Solana Devnet memo attestation / NFT badge **without** changing the engine’s independence from blockchain/wallet/marketplace features.
+
+**Historical open questions (draft context):** deadline/language/visual identity/reference-confidence questions above were part of the original planning draft; current implementation uses visible confidence flags in Discovery and English UI/docs.

@@ -25,10 +25,11 @@ consequences of your protocol and monetary decisions unfold.
   a decomposed health score with visible weights, and a live history chart.
 - **Survive random events.** Market crashes, congestion spikes, negative media and
   producer exodus, each with a severity scaled by how fragile the network already is.
-- **Play Discovery Mode.** Reconstruct Bitcoin 2009 from its behaviour, with a weighted
-  similarity score and progressive, digit-free hints.
-- **Unlock achievements.** Five goals, each recording the configuration hash, seed and a
-  snapshot of the exact grid that earned it.
+- **Play Discovery Mode.** Reconstruct currencies from their behaviour (educational abstractions):
+  Bitcoin 2009, Ethereum 2015 (early-era), and Solana 2020 (launch-era), with weighted
+  similarity scores, visible confidence, and progressive digit-free hints (feedback appears after running).
+- **Unlock achievements.** Goals (including discovery achievements) record configuration hash, seed and a
+  snapshot of the exact grid that earned it. Awards can be exported/imported as JSON.
 - **Learn the words.** A 51-term glossary with in-game and real-world explanations, plus
   twelve curated external links that each say what you will learn before you click.
 
@@ -82,7 +83,7 @@ futurecoins/
   engine.py        the tick pipeline
   metrics.py       snapshots and the health score
   grid.py          projection of agents onto cells
-  discovery/       Bitcoin 2009 target, scoring, hints
+  discovery/       targets (BTC/ETH/SOL abstractions), scoring, hints
   achievements/    pure predicates, persistence, snapshots
   education/       glossary and external resources
   interface/       Streamlit-only presentation
@@ -128,13 +129,18 @@ marketplace and no multiplayer. A Solana Memo attestation and an optional NFT ba
 deliberately deferred; the design keeps the engine independent so they can be added as a
 separate adapter later.
 
+## Further development (notes)
+- Add a Stable Utility Coin discovery target/unlock path (currently a locked mystery).
+- Expand scenarios/balance based on playtests; improve accessibility/mobile polish.
+- Keep engine independent from blockchain/wallet features; any on-chain adapter remains optional/post-MVP.
+
 ## Beginner walkthrough (first time here)
 
 1. **Try the live app:** open <https://futurecoins.streamlit.app/> (no installation).
 2. **Read the welcome guide** on first visit, then press **Start playing**.
 3. **Pick a preset or start from Blank Canvas** in the sidebar, adjust settings, press **⚙️ Apply config**.
 4. **Press Run.** Each tick = 1 simulated day. Watch the grid, indicator cards, and charts.
-5. **Explore tabs:** **Dashboard** (health/history after you run), **Discovery** (match Bitcoin 2009 by observing behavior; similarity feedback appears after running), **Awards**, **Glossary**, **Why** (changes + feedback loops).
+5. **Explore tabs:** **Dashboard** (health/history after you run), **Discovery** (choose a target such as Bitcoin 2009 / Ethereum 2015 / Solana 2020 and match it by observing behavior; similarity feedback appears after running), **Awards**, **Glossary**, **Why** (changes + feedback loops).
 6. **Run locally (optional):**
    ```bash
    python -m venv .venv
